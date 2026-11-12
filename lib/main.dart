@@ -38,6 +38,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _totalVentas = 0.0;
   double _totalCompras = 0.0;
 
+  // Controladores para la calculadora interactiva en vivo
+  final TextEditingController _costController = TextEditingController(text: '150');
+  final TextEditingController _marginController = TextEditingController(text: '40');
+
   @override
   void initState() {
     super.initState();
@@ -53,10 +57,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     double rentabilidad = _totalVentas - _totalCompras;
+    double costo = double.tryParse(_costController.text) ?? 0.0;
+    double margen = double.tryParse(_marginController.text) ?? 0.0;
+    double precioRecomendado = costo * (1 + margen / 100);
+    double beneficioUnitario = precioRecomendado - costo;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('SIP Solutions ERP', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text('Dashboard Overview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         backgroundColor: const Color(0xFF111827),
         elevation: 0,
         actions: [
@@ -71,7 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // BOTONES DE ACCIÓN PRINCIPAL (Motor del ERP)
+            // BOTONES DE ACCIÓN PRINCIPAL
             Row(
               children: [
                 Expanded(
@@ -82,11 +90,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    icon: const Icon(Icons.add_circle_outline),
-                    label: const Text('Nueva Venta', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    onPressed: () {
-                      // Acción para nueva venta
-                    },
+                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                    label: const Text('+ Nueva Venta', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    onPressed: () {},
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -98,80 +104,160 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
-                    icon: const Icon(Icons.shopping_cart_outlined),
-                    label: const Text('Nueva Compra', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    onPressed: () {
-                      // Acción para nueva compra
-                    },
+                    icon: const Icon(Icons.shopping_cart_outlined, size: 20),
+                    label: const Text('+ Nueva Compra', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    onPressed: () {},
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // ALERTA DE STOCK CRÍTICO
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1f1619),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 28),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Stock Crítico Mínimo (3 Productos)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                        SizedBox(height: 2),
+                        Text('Notificación de stock por debajo del nivel de reabastecimiento.', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // TARJETAS DE MÉTRICAS FINANCIERAS (GRID)
+            GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 1.5,
+              children: [
+                _buildMetricCard('VENTAS TOTALES', '${_totalVentas.toStringAsFixed(2)} €', '+42.7%', Colors.blueAccent, Icons.trending_up),
+                _buildMetricCard('BENEFICIO NETO', '${rentabilidad.toStringAsFixed(2)} €', 'Ganancia Bruta', Colors.greenAccent, Icons.account_balance_wallet_outlined),
+                _buildMetricCard('MARGEN PROMEDIO', '38.7%', 'Margen / Ventas', Colors.purpleAccent, Icons.pie_chart_outline),
+                _buildMetricCard('TRANSACCIONES', '1,852', '+19.3%', Colors.orangeAccent, Icons.receipt_long),
               ],
             ),
             const SizedBox(height: 20),
 
-            // TARJETAS DE MÉTRICAS FINANCIERAS
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
+            // CALCULADORA & SIMULADOR DE PRECIOS EN VIVO
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(Icons.calculate_outlined, color: Colors.blueAccent, size: 20),
+                      SizedBox(width: 8),
+                      Text('Calculadora & Simulador en Vivo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('Calcula precios de venta y beneficio bruto por producto.', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _costController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Costo Unitario (€)',
+                            labelStyle: TextStyle(fontSize: 12, color: Colors.grey),
+                            filled: true,
+                            fillColor: Color(0xFF1f2937),
+                            border: OutlineInputBorder(borderSide: BorderSide.none),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _marginController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Margen Deseado (%)',
+                            labelStyle: TextStyle(fontSize: 12, color: Colors.grey),
+                            filled: true,
+                            fillColor: Color(0xFF1f2937),
+                            border: OutlineInputBorder(borderSide: BorderSide.none),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF111827),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                      color: const Color(0xFF1f2937),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('VENTAS TOTALES', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Text('${_totalVentas.toStringAsFixed(2)} €', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                        const SizedBox(height: 4),
-                        const Text('+ Activo', style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('PRECIO VENTA RECOMENDADO', style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            Text('${precioRecomendado.toStringAsFixed(2)} €', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('BENEFICIO UNITARIO', style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            Text('${beneficioUnitario.toStringAsFixed(2)} €', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
+                          ],
+                        ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF111827),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.withOpacity(0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('BENEFICIO NETO', style: TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 8),
-                        Text('${rentabilidad.toStringAsFixed(2)} €', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
-                        const SizedBox(height: 4),
-                        const Text('Sales - Purchases', style: TextStyle(color: Colors.green, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            // SECCIÓN DE TRANSACCIONES / HISTORIAL RECIENTE
-            const Text('Transacciones & Kardex', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-            const SizedBox(height: 12),
-            
+            // SECCIÓN DE TRANSACCIONES & KARDEX
+            const Text('Clientes, Ventas y Margen', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(height: 10),
+
             SizedBox(
-              height: 350,
+              height: 320,
               child: FutureBuilder<List<TransactionModel>>(
                 future: _transactionsFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
-                  } else if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
                   } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text('No hay registros en el sistema.'));
+                    return const Center(child: Text('No hay transacciones registradas.'));
                   }
 
                   final transactions = snapshot.data!;
@@ -180,22 +266,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     itemBuilder: (context, index) {
                       final tx = transactions[index];
                       return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
+                        margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
                           color: const Color(0xFF111827),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: Colors.white10),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          title: Text(tx.client, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                          subtitle: Text('Tipo: ${tx.type} | Fecha: ${tx.date}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          title: Text(tx.client, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                          subtitle: Text('Tipo: ${tx.type} | Fecha: ${tx.date}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
                           trailing: Text(
                             '${tx.amount.toStringAsFixed(2)} €',
                             style: TextStyle(
-                              fontWeight: FontWeight.bold, 
-                              fontSize: 16, 
-                              color: tx.type == 'VENTA' ? Colors.greenAccent : (tx.type == 'COMPRA' ? Colors.orangeAccent : Colors.blueAccent)
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: tx.type == 'VENTA' ? Colors.greenAccent : (tx.type == 'COMPRA' ? Colors.orangeAccent : Colors.blueAccent),
                             ),
                           ),
                         ),
@@ -207,6 +293,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, String subtitle, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+              Icon(icon, color: color, size: 16),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 2),
+          Text(subtitle, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500)),
+        ],
       ),
     );
   }
