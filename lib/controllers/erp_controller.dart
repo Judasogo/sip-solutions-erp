@@ -38,15 +38,11 @@ class ErpController {
 
         String fechaHoy = DateTime.now().toString().substring(0, 10);
 
-        // 1. Productos iniciales en stock
+        // Datos iniciales base
         await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Mónaco', 'client_type': 'General', 'amount': 37.0, 'paid_amount': 37.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Activo', 'date': fechaHoy});
         await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Tíbet', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Activo', 'date': fechaHoy});
         await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Granada', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Activo', 'date': fechaHoy});
-
-        // 2. Compra base del producto Mónaco (37€) -> Base de rentabilidad
         await db.insert('transactions', {'type': 'COMPRA', 'client': 'Proveedor Mónaco', 'client_type': 'Proveedor', 'amount': 37.0, 'paid_amount': 37.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Completada', 'date': fechaHoy});
-
-        // 3. Venta del producto Mónaco (90€)
         await db.insert('transactions', {'type': 'VENTA', 'client': 'Mónaco', 'client_type': 'Cliente Final', 'amount': 90.0, 'paid_amount': 90.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Completada', 'date': fechaHoy});
       },
     );
@@ -54,7 +50,7 @@ class ErpController {
 
   Future<List<TransactionModel>> getTransactions([String? typeFilter]) async {
     final db = await instance.database;
-    final result = typeFilter == null 
+    final result = typeFilter == null || typeFilter == 'TODOS'
         ? await db.query('transactions', orderBy: 'id DESC')
         : await db.query('transactions', where: 'type = ?', whereArgs: [typeFilter], orderBy: 'id DESC');
     return result.map((json) => TransactionModel.fromMap(json)).toList();
@@ -63,6 +59,11 @@ class ErpController {
   Future<int> insertTransaction(TransactionModel transaction) async {
     final db = await instance.database;
     return await db.insert('transactions', transaction.toMap());
+  }
+
+  Future<int> deleteTransaction(int id) async {
+    final db = await instance.database;
+    return await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<double> getSum(String type) async {
