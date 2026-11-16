@@ -38,10 +38,9 @@ class ErpController {
 
         String fechaHoy = DateTime.now().toString().substring(0, 10);
 
-        // Datos iniciales base
         await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Mónaco', 'client_type': 'General', 'amount': 37.0, 'paid_amount': 37.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Activo', 'date': fechaHoy});
-        await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Tíbet', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Activo', 'date': fechaHoy});
-        await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Granada', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Activo', 'date': fechaHoy});
+        await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Tíbet', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Stock Bajo', 'date': fechaHoy});
+        await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Granada', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Stock Bajo', 'date': fechaHoy});
         await db.insert('transactions', {'type': 'COMPRA', 'client': 'Proveedor Mónaco', 'client_type': 'Proveedor', 'amount': 37.0, 'paid_amount': 37.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Completada', 'date': fechaHoy});
         await db.insert('transactions', {'type': 'VENTA', 'client': 'Mónaco', 'client_type': 'Cliente Final', 'amount': 90.0, 'paid_amount': 90.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Completada', 'date': fechaHoy});
       },
@@ -56,9 +55,30 @@ class ErpController {
     return result.map((json) => TransactionModel.fromMap(json)).toList();
   }
 
+  Future<List<TransactionModel>> getPendingCobros() async {
+    final db = await instance.database;
+    final result = await db.query(
+      'transactions',
+      where: 'type = ? AND status != ?',
+      whereArgs: ['COBRO', 'Cobrado'],
+      orderBy: 'id DESC',
+    );
+    return result.map((json) => TransactionModel.fromMap(json)).toList();
+  }
+
   Future<int> insertTransaction(TransactionModel transaction) async {
     final db = await instance.database;
     return await db.insert('transactions', transaction.toMap());
+  }
+
+  Future<int> markCobroAsPaid(int id, double amount) async {
+    final db = await instance.database;
+    return await db.update(
+      'transactions',
+      {'status': 'Cobrado', 'paid_amount': amount},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<int> deleteTransaction(int id) async {
@@ -68,10 +88,24 @@ class ErpController {
 
   Future<double> getSum(String type) async {
     final db = await instance.database;
-    final res = await db.rawQuery('SELECT SUM(amount) as total FROM transactions WHERE type = ?', [type]);
-    if (res.isNotEmpty && res.first['total'] != null) {
-      return (res.first['total'] as num).toDouble();
+    if (type == 'COBRO') {
+      final res = await db.rawQuery("SELECT SUM(amount) as total FROM transactions WHERE type = 'COBRO' AND status != 'Cobrado'");
+      return (res.first['total'] as num?)?.toDouble() ?? 0.0;
     }
-    return 0.0;
+    if (type == 'VENTA') {
+      final resVentas = await db.rawQuery("SELECT SUM(amount) as total FROM transactions WHERE type = 'VENTA'");
+      final resCobrados = await db.rawQuery("SELECT SUM(amount) as total FROM transactions WHERE type = 'COBRO' AND status = 'Cobrado'");
+      double v = (resVentas.first['total'] as num?)?.toDouble() ?? 0.0;
+      double c = (resCobrados.first['total'] as num?)?.toDouble() ?? 0.0;
+      return v + c;
+    }
+    final res = await db.rawQuery('SELECT SUM(amount) as total FROM transactions WHERE type = ?', [type]);
+    return (res.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  Future<int> getLowStockCount() async {
+    final db = await instance.database;
+    final res = await db.rawQuery("SELECT COUNT(*) as cnt FROM transactions WHERE type = 'PRODUCTO' AND amount <= 0");
+    return (res.first['cnt'] as int?) ?? 0;
   }
 }
