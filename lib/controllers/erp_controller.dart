@@ -10,7 +10,7 @@ class ErpController {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('erp_juan_v1.db');
+    _database = await _initDB('erp_juan_v2.db');
     return _database!;
   }
 
@@ -19,7 +19,7 @@ class ErpController {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE transactions (
@@ -38,7 +38,6 @@ class ErpController {
 
         String fechaHoy = DateTime.now().toString().substring(0, 10);
 
-        // En PRODUCTO: amount = PVP Cliente Final, paid_amount = Precio Especial Colaborador, payment_mode = Costo Base
         await db.insert('transactions', {
           'type': 'PRODUCTO',
           'client': 'Mónaco',
@@ -72,28 +71,6 @@ class ErpController {
           'status': 'Stock Bajo',
           'date': fechaHoy,
         });
-        await db.insert('transactions', {
-          'type': 'COMPRA',
-          'client': 'Mónaco',
-          'client_type': 'Proveedor',
-          'amount': 37.0,
-          'paid_amount': 37.0,
-          'payment_mode': 'Contado',
-          'has_delivery': 0,
-          'status': 'Completada',
-          'date': fechaHoy,
-        });
-        await db.insert('transactions', {
-          'type': 'VENTA',
-          'client': 'Cliente General (Mónaco)',
-          'client_type': 'Cliente Final',
-          'amount': 90.0,
-          'paid_amount': 90.0,
-          'payment_mode': 'Contado',
-          'has_delivery': 0,
-          'status': 'Completada',
-          'date': fechaHoy,
-        });
       },
     );
   }
@@ -120,9 +97,7 @@ class ErpController {
   Future<int> insertTransaction(TransactionModel transaction) async {
     final db = await instance.database;
 
-    // RETROALIMENTACIÓN ENTRE MÓDULOS
     if (transaction.type == 'PRODUCTO') {
-      // Si el producto ya existe, lo actualiza en lugar de duplicarlo
       final existing = await db.query(
         'transactions',
         where: 'type = ? AND LOWER(client) = ?',
@@ -137,7 +112,6 @@ class ErpController {
         );
       }
     } else if (transaction.type == 'COMPRA') {
-      // Si se compra un producto registrado en Stock, activa su estado y actualiza su costo base
       final existingProd = await db.query(
         'transactions',
         where: 'type = ? AND LOWER(client) = ?',
