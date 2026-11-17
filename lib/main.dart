@@ -80,9 +80,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _exportData() async {
     final buffer = StringBuffer();
-    buffer.writeln('ID;MODULO;CLIENTE_PRODUCTO;TARIFA;IMPORTE_EUR;PAGO;ESTADO;FECHA');
+    buffer.writeln('ID;MODULO;CLIENTE_PRODUCTO;TARIFA;IMPORTE_PVP;PRECIO_COLAB_PAGO;PAGO_COSTO;ESTADO;FECHA');
     for (var tx in _allTransactions) {
-      buffer.writeln('${tx.id ?? ""};${tx.type};${tx.client};${tx.clientType};${tx.amount.toStringAsFixed(2)};${tx.paymentMode};${tx.status};${tx.date}');
+      buffer.writeln('${tx.id ?? ""};${tx.type};${tx.client};${tx.clientType};${tx.amount.toStringAsFixed(2)};${tx.paidAmount.toStringAsFixed(2)};${tx.paymentMode};${tx.status};${tx.date}');
     }
     await Clipboard.setData(ClipboardData(text: buffer.toString()));
     if (mounted) {
@@ -125,9 +125,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 _showAddTransactionDialog(context, 'VENTA');
               }),
               const SizedBox(height: 10),
-              _buildQuickMenuItem(Icons.inventory_2_outlined, 'Nuevo Producto', const Color(0xFF3B82F6), () {
+              _buildQuickMenuItem(Icons.inventory_2_outlined, 'Nuevo Producto (PVP / Especial)', const Color(0xFF3B82F6), () {
                 Navigator.pop(context);
-                _showAddTransactionDialog(context, 'PRODUCTO');
+                _showProductDialog(context);
               }),
               const SizedBox(height: 10),
               _buildQuickMenuItem(Icons.add_shopping_cart, 'Registrar Compra Stock', Colors.orangeAccent, () {
@@ -164,34 +164,181 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           children: [
             Icon(icon, color: color, size: 22),
             const SizedBox(width: 14),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+            Expanded(
+              child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // DIÁLOGO OPERATIVO CONECTADO A SQLITE
-  void _showAddTransactionDialog(BuildContext context, String type, {String? initialName}) {
-    final TextEditingController clientController = TextEditingController(text: initialName ?? '');
-    final TextEditingController amountController = TextEditingController();
-    String clientType = type == 'VENTA' || type == 'COBRO' ? 'Cliente Final' : 'General';
+  // DIÁLOGO DEDICADO PARA PRODUCTOS CON PVP Y PRECIO ESPECIAL COLABORADOR
+  void _showProductDialog(BuildContext context, {TransactionModel? existingProduct}) {
+    final nameController = TextEditingController(text: existingProduct?.client ?? '');
+    final pvpController = TextEditingController(
+      text: existingProduct != null && existingProduct.amount > 0 ? existingProduct.amount.toStringAsFixed(2) : '',
+    );
+    final specialController = TextEditingController(
+      text: existingProduct != null && existingProduct.paidAmount > 0 ? existingProduct.paidAmount.toStringAsFixed(2) : '',
+    );
+    final costController = TextEditingController(
+      text: existingProduct != null && existingProduct.paymentMode != 'Contado' ? existingProduct.paymentMode : '',
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF111827),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: Colors.blueAccent.withOpacity(0.4)),
+          ),
+          title: Text(
+            existingProduct == null ? 'Nuevo Producto en Stock' : 'Editar Tarifas: ${existingProduct.client}',
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Nombre del Producto (ej. Mónaco, Tíbet)',
+                    labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                    filled: true,
+                    fillColor: const Color(0xFF1f2937),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pvpController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'PVP Cliente Final (€)',
+                    labelStyle: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold),
+                    filled: true,
+                    fillColor: const Color(0xFF1f2937),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: specialController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Precio Especial Colaborador (€)',
+                    labelStyle: const TextStyle(color: Colors.purpleAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                    filled: true,
+                    fillColor: const Color(0xFF1f2937),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: costController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Costo Compra Base (€) (Opcional)',
+                    labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                    filled: true,
+                    fillColor: const Color(0xFF1f2937),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final pvp = double.tryParse(pvpController.text.replaceAll(',', '.')) ?? 0.0;
+                final special = double.tryParse(specialController.text.replaceAll(',', '.')) ?? pvp;
+                final cost = double.tryParse(costController.text.replaceAll(',', '.')) ?? 0.0;
+
+                if (name.isNotEmpty) {
+                  if (existingProduct != null && existingProduct.id != null) {
+                    await ErpController.instance.updateProduct(existingProduct.id!, name, pvp, special, cost);
+                  } else {
+                    String fechaHoy = DateTime.now().toString().substring(0, 10);
+                    final prodTx = TransactionModel(
+                      type: 'PRODUCTO',
+                      client: name,
+                      clientType: 'General',
+                      amount: pvp,
+                      paidAmount: special,
+                      paymentMode: cost.toStringAsFixed(2),
+                      hasDelivery: false,
+                      status: pvp > 0 ? 'Activo' : 'Stock Bajo',
+                      date: fechaHoy,
+                    );
+                    await ErpController.instance.insertTransaction(prodTx);
+                  }
+                  if (context.mounted) Navigator.pop(context);
+                  await _refreshAllData();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Producto "$name" actualizado en Stock'),
+                        backgroundColor: const Color(0xFF10B981),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Guardar Producto', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // DIÁLOGO DE VENTA, COBRO Y COMPRA RETROALIMENTADO CON EL CATÁLOGO
+  void _showAddTransactionDialog(BuildContext context, String type, {String? prefillClient, String? prefillClientType}) {
+    final productos = _allTransactions.where((t) => t.type == 'PRODUCTO').toList();
+    TransactionModel? selectedProduct = productos.isNotEmpty ? productos.first : null;
+
+    final TextEditingController clientController = TextEditingController(text: prefillClient ?? '');
+    final TextEditingController amountController = TextEditingController(
+      text: (type == 'VENTA' || type == 'COBRO') && selectedProduct != null && selectedProduct.amount > 0
+          ? selectedProduct.amount.toStringAsFixed(2)
+          : '',
+    );
+
+    String clientType = prefillClientType ?? (type == 'VENTA' || type == 'COBRO' ? 'Cliente Final' : 'General');
     String paymentMode = 'Contado';
+
+    if ((type == 'VENTA' || type == 'COBRO') && selectedProduct != null) {
+      double autoPrice = clientType == 'Colaborador' ? selectedProduct.paidAmount : selectedProduct.amount;
+      if (autoPrice > 0) amountController.text = autoPrice.toStringAsFixed(2);
+    }
 
     String titleLabel = 'Registrar Movimiento';
     String nameHint = 'Nombre / Concepto';
     if (type == 'VENTA') {
       titleLabel = 'Registrar Venta';
-      nameHint = 'Producto o Cliente (ej. Mónaco)';
+      nameHint = 'Nombre del Cliente o Colaborador';
     } else if (type == 'COMPRA') {
-      titleLabel = 'Registrar Compra de Stock';
-      nameHint = 'Proveedor o Producto';
+      titleLabel = 'Registrar Compra Stock';
+      nameHint = 'Producto comprado (ej. Tíbet)';
     } else if (type == 'COBRO') {
       titleLabel = 'Nueva Cuenta por Cobrar';
-      nameHint = 'Cliente / Deudor';
-    } else if (type == 'PRODUCTO') {
-      titleLabel = 'Nuevo Producto en Stock';
-      nameHint = 'Nombre del Producto (ej. Tíbet)';
+      nameHint = 'Cliente / Colaborador Deudor';
     }
 
     showDialog(
@@ -199,6 +346,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            void updateAutoPrice(TransactionModel? prod, String cType) {
+              if (prod == null) return;
+              double price = cType == 'Colaborador' ? prod.paidAmount : prod.amount;
+              if (price > 0) {
+                amountController.text = price.toStringAsFixed(2);
+              }
+            }
+
             return AlertDialog(
               backgroundColor: const Color(0xFF111827),
               shape: RoundedRectangleBorder(
@@ -210,24 +365,37 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if ((type == 'VENTA' || type == 'COBRO') && productos.isNotEmpty) ...[
+                      DropdownButtonFormField<TransactionModel>(
+                        value: selectedProduct,
+                        dropdownColor: const Color(0xFF1f2937),
+                        decoration: InputDecoration(
+                          labelText: 'Producto del Stock',
+                          labelStyle: const TextStyle(color: Colors.blueAccent, fontSize: 12),
+                          filled: true,
+                          fillColor: const Color(0xFF1f2937),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        ),
+                        items: productos.map((p) {
+                          return DropdownMenuItem(
+                            value: p,
+                            child: Text('${p.client} (PVP ${p.amount.toStringAsFixed(0)}€ / Col ${p.paidAmount.toStringAsFixed(0)}€)', style: const TextStyle(fontSize: 12)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            selectedProduct = val;
+                            updateAutoPrice(val, clientType);
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     TextField(
                       controller: clientController,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         labelText: nameHint,
-                        labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
-                        filled: true,
-                        fillColor: const Color(0xFF1f2937),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: amountController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: type == 'PRODUCTO' ? 'Valorización Stock (€)' : 'Importe (€)',
                         labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
                         filled: true,
                         fillColor: const Color(0xFF1f2937),
@@ -240,18 +408,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         value: clientType,
                         dropdownColor: const Color(0xFF1f2937),
                         decoration: InputDecoration(
-                          labelText: 'Tipo de Cliente',
+                          labelText: 'Tarifa Aplicada',
                           labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
                           filled: true,
                           fillColor: const Color(0xFF1f2937),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                         ),
                         items: const [
-                          DropdownMenuItem(value: 'Cliente Final', child: Text('Cliente Final')),
-                          DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador')),
+                          DropdownMenuItem(value: 'Cliente Final', child: Text('Cliente Final (PVP)')),
+                          DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador (Precio Especial)')),
                         ],
-                        onChanged: (val) => setDialogState(() => clientType = val!),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            clientType = val!;
+                            updateAutoPrice(selectedProduct, clientType);
+                          });
+                        },
                       ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Importe Total (€)',
+                        labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                        filled: true,
+                        fillColor: const Color(0xFF1f2937),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    if (type == 'VENTA' || type == 'COBRO') ...[
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
                         value: paymentMode,
@@ -281,23 +469,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
                   onPressed: () async {
-                    final client = clientController.text.trim();
+                    final rawName = clientController.text.trim();
                     final amount = double.tryParse(amountController.text.replaceAll(',', '.')) ?? 0.0;
-                    if (client.isNotEmpty && amount >= 0) {
+                    if (rawName.isNotEmpty && amount >= 0) {
                       String fechaHoy = DateTime.now().toString().substring(0, 10);
-                      String statusText = 'Completada';
-                      if (type == 'COBRO') statusText = 'Pendiente';
-                      if (type == 'PRODUCTO') statusText = amount > 0 ? 'Activo' : 'Stock Bajo';
+                      String finalConcept = (type == 'VENTA' || type == 'COBRO') && selectedProduct != null
+                          ? '$rawName (${selectedProduct!.client})'
+                          : rawName;
 
                       final nuevaTx = TransactionModel(
                         type: type,
-                        client: client,
+                        client: finalConcept,
                         clientType: clientType,
                         amount: amount,
                         paidAmount: type == 'COBRO' ? 0.0 : amount,
                         paymentMode: paymentMode,
                         hasDelivery: false,
-                        status: statusText,
+                        status: type == 'COBRO' ? 'Pendiente' : 'Completada',
                         date: fechaHoy,
                       );
                       await ErpController.instance.insertTransaction(nuevaTx);
@@ -306,7 +494,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('$titleLabel guardado en base de datos'),
+                            content: Text('$titleLabel guardado y sincronizado'),
                             backgroundColor: const Color(0xFF10B981),
                             duration: const Duration(seconds: 2),
                           ),
@@ -324,7 +512,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // BANNER SUPERIOR PERSISTENTE EN TODA LA APP
   Widget _buildTopBanner() {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -453,7 +640,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // PESTAÑA 0: INICIO (DASHBOARD COMPLETO)
   Widget _buildInicioTab() {
     double costo = double.tryParse(_costController.text.replaceAll(',', '.')) ?? 0.0;
     double margen = double.tryParse(_marginController.text.replaceAll(',', '.')) ?? 0.0;
@@ -469,7 +655,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _buildTopBanner(),
           const SizedBox(height: 16),
 
-          // 4 TARJETAS PRINCIPALES UNIDAS A LA BASE DE DATOS Y A SU MÓDULO
           GridView.count(
             crossAxisCount: 2,
             crossAxisSpacing: 12,
@@ -485,45 +670,44 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 color: Colors.redAccent,
                 icon: Icons.access_time,
                 borderColor: Colors.redAccent.withOpacity(0.45),
-                onTap: () => setState(() => _currentIndex = 1), // Va a Cobros
+                onTap: () => setState(() => _currentIndex = 1),
               ),
               _buildInteractiveCard(
                 title: 'Ingresos',
                 value: '${_totalIngresos.toStringAsFixed(2)} €',
-                subtitle: 'Beneficio: ${beneficioNeto.toStringAsFixed(2)} €',
+                subtitle: 'Neto: ${beneficioNeto.toStringAsFixed(2)} €',
                 color: const Color(0xFF10B981),
                 icon: Icons.euro,
                 borderColor: Colors.white12,
                 onTap: () {
                   setState(() {
                     _kardexFilter = 'VENTA';
-                    _currentIndex = 3; // Va a Kardex filtrado en Ventas
+                    _currentIndex = 3;
                   });
                 },
               ),
               _buildInteractiveCard(
                 title: 'Valor Stock',
                 value: '${_valorStock.toStringAsFixed(2)} €',
-                subtitle: 'En inventario activo',
+                subtitle: 'Catálogo PVP activo',
                 color: const Color(0xFF3B82F6),
                 icon: Icons.inventory_2_outlined,
                 borderColor: Colors.white12,
-                onTap: () => setState(() => _currentIndex = 2), // Va a Stock
+                onTap: () => setState(() => _currentIndex = 2),
               ),
               _buildInteractiveCard(
                 title: 'Stock Bajo',
                 value: '$_lowStockCount Prod.',
-                subtitle: _lowStockCount > 0 ? 'Requieren reposición' : 'Stock óptimo',
+                subtitle: _lowStockCount > 0 ? 'Requieren precio/stock' : 'Catálogo completo',
                 color: Colors.amber,
                 icon: Icons.warning_amber_rounded,
                 borderColor: Colors.white12,
-                onTap: () => setState(() => _currentIndex = 2), // Va a Stock
+                onTap: () => setState(() => _currentIndex = 2),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
-          // PRÓXIMOS VENCIMIENTOS DE COBRO
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -591,7 +775,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
           const SizedBox(height: 16),
 
-          // RENDIMIENTO DE VENTAS (GRÁFICO CONECTADO A INGRESOS)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -637,7 +820,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
           const SizedBox(height: 16),
 
-          // TARJETAS INFERIORES DE ACCIÓN DIRECTA ("Nueva Cta. Cobrar" y "Nueva Venta")
           Row(
             children: [
               Expanded(
@@ -706,7 +888,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                             children: const [
                               Text('Nueva Venta', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                               SizedBox(height: 2),
-                              Text('Contado / Bizum', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                              Text('PVP / Colaborador', style: TextStyle(color: Colors.grey, fontSize: 11)),
                             ],
                           ),
                         ),
@@ -719,7 +901,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
           const SizedBox(height: 16),
 
-          // CALCULADORA & SIMULADOR EN VIVO
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -811,7 +992,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // PESTAÑA 1: COBROS (CUENTAS POR COBRAR OPERATIVAS)
   Widget _buildCobrosTab() {
     final cobros = _allTransactions.where((t) => t.type == 'COBRO').toList();
     return Padding(
@@ -884,7 +1064,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // PESTAÑA 2: STOCK (INVENTARIO Y PRODUCTOS)
+  // MÓDULO STOCK CON PVP Y PRECIO ESPECIAL COLABORADOR EDITABLE
   Widget _buildStockTab() {
     final productos = _allTransactions.where((t) => t.type == 'PRODUCTO').toList();
     return Padding(
@@ -895,15 +1075,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Inventario & Stock', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              const Text('Inventario & Tarifas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
                 icon: const Icon(Icons.add, size: 18, color: Colors.white),
                 label: const Text('Nuevo Producto', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                onPressed: () => _showAddTransactionDialog(context, 'PRODUCTO'),
+                onPressed: () => _showProductDialog(context),
               ),
             ],
           ),
+          const SizedBox(height: 4),
+          const Text('Toca un producto para editar su PVP y Precio Especial Colaborador.', style: TextStyle(color: Colors.grey, fontSize: 11)),
           const SizedBox(height: 12),
           Expanded(
             child: productos.isEmpty
@@ -913,24 +1095,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     itemBuilder: (context, index) {
                       final prod = productos[index];
                       final isLow = prod.amount <= 0;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF111827),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: isLow ? Colors.amber.withOpacity(0.4) : Colors.blueAccent.withOpacity(0.3)),
-                        ),
-                        child: ListTile(
-                          leading: Icon(Icons.inventory_2_outlined, color: isLow ? Colors.amber : Colors.blueAccent),
-                          title: Text(prod.client, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          subtitle: Text(isLow ? 'Stock Bajo • Requiere reposición' : 'En inventario activo', style: TextStyle(color: isLow ? Colors.amber : Colors.grey, fontSize: 11)),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                      return InkWell(
+                        onTap: () => _showProductDialog(context, existingProduct: prod),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF111827),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: isLow ? Colors.amber.withOpacity(0.45) : Colors.blueAccent.withOpacity(0.35)),
+                          ),
+                          child: Row(
                             children: [
-                              Text('${prod.amount.toStringAsFixed(2)} €', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                              Icon(Icons.inventory_2_outlined, color: isLow ? Colors.amber : Colors.blueAccent, size: 26),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(prod.client, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                    const SizedBox(height: 4),
+                                    if (isLow)
+                                      const Text('Sin tarifa asignada • Toca para configurar PVP', style: TextStyle(color: Colors.amber, fontSize: 11))
+                                    else
+                                      Row(
+                                        children: [
+                                          Text('PVP: ${prod.amount.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12)),
+                                          const SizedBox(width: 10),
+                                          Text('Especial Col.: ${prod.paidAmount.toStringAsFixed(2)} €', style: const TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 12)),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent, size: 20),
+                                onPressed: () => _showProductDialog(context, existingProduct: prod),
+                              ),
                               if (prod.id != null)
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 18),
+                                  icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
                                   onPressed: () async {
                                     await ErpController.instance.deleteTransaction(prod.id!);
                                     await _refreshAllData();
@@ -948,7 +1153,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // PESTAÑA 3: KARDEX (HISTORIAL COMPLETO DE MOVIMIENTOS)
   Widget _buildKardexTab() {
     final filtered = _kardexFilter == 'TODOS'
         ? _allTransactions
@@ -1001,7 +1205,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         ),
                         child: ListTile(
                           title: Text(tx.client, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
-                          subtitle: Text('${tx.type} • ${tx.clientType} (${tx.paymentMode}) • ${tx.date}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                          subtitle: Text(
+                            tx.type == 'PRODUCTO'
+                                ? 'PRODUCTO • PVP: ${tx.amount.toStringAsFixed(2)} € | Col: ${tx.paidAmount.toStringAsFixed(2)} €'
+                                : '${tx.type} • ${tx.clientType} (${tx.paymentMode}) • ${tx.date}',
+                            style: const TextStyle(color: Colors.grey, fontSize: 11),
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1026,9 +1235,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // PESTAÑA 4: CLIENTES & COLABORADORES
+  // MÓDULO CLIENTES & COLABORADORES AGRUPADO Y RETROALIMENTADO
   Widget _buildClientesTab() {
     final operacionesClientes = _allTransactions.where((t) => t.type == 'VENTA' || t.type == 'COBRO').toList();
+
+    // Agrupa por nombre de cliente (extrayendo el nombre antes del paréntesis de producto)
+    final Map<String, Map<String, dynamic>> clientesMap = {};
+    for (var op in operacionesClientes) {
+      String cleanName = op.client.contains('(') ? op.client.split('(').first.trim() : op.client.trim();
+      if (cleanName.isEmpty) cleanName = op.client;
+
+      if (!clientesMap.containsKey(cleanName)) {
+        clientesMap[cleanName] = {
+          'name': cleanName,
+          'type': op.clientType,
+          'totalVentas': 0.0,
+          'pendiente': 0.0,
+          'count': 0,
+        };
+      }
+      clientesMap[cleanName]!['count'] = (clientesMap[cleanName]!['count'] as int) + 1;
+      if (op.type == 'VENTA' || op.status == 'Cobrado') {
+        clientesMap[cleanName]!['totalVentas'] = (clientesMap[cleanName]!['totalVentas'] as double) + op.amount;
+      } else if (op.type == 'COBRO' && op.status != 'Cobrado') {
+        clientesMap[cleanName]!['pendiente'] = (clientesMap[cleanName]!['pendiente'] as double) + op.amount;
+      }
+      if (op.clientType == 'Colaborador') {
+        clientesMap[cleanName]!['type'] = 'Colaborador';
+      }
+    }
+
+    final listaClientes = clientesMap.values.toList();
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1046,30 +1284,66 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 4),
+          const Text('Toca un cliente o colaborador para registrarle una venta directa con su tarifa.', style: TextStyle(color: Colors.grey, fontSize: 11)),
           const SizedBox(height: 12),
           Expanded(
-            child: operacionesClientes.isEmpty
-                ? const Center(child: Text('Aún no hay operaciones con clientes o colaboradores.', style: TextStyle(color: Colors.grey)))
+            child: listaClientes.isEmpty
+                ? const Center(child: Text('Registra una venta o cobro para alimentar este directorio.', style: TextStyle(color: Colors.grey)))
                 : ListView.builder(
-                    itemCount: operacionesClientes.length,
+                    itemCount: listaClientes.length,
                     itemBuilder: (context, index) {
-                      final op = operacionesClientes[index];
-                      final isColab = op.clientType == 'Colaborador';
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF111827),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: isColab ? Colors.purpleAccent.withOpacity(0.35) : Colors.blueAccent.withOpacity(0.25)),
+                      final cli = listaClientes[index];
+                      final isColab = cli['type'] == 'Colaborador';
+                      final double pendiente = cli['pendiente'] as double;
+                      final double totalVentas = cli['totalVentas'] as double;
+
+                      return InkWell(
+                        onTap: () => _showAddTransactionDialog(
+                          context,
+                          'VENTA',
+                          prefillClient: cli['name'],
+                          prefillClientType: cli['type'],
                         ),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: isColab ? Colors.purpleAccent.withOpacity(0.2) : Colors.blueAccent.withOpacity(0.2),
-                            child: Icon(Icons.person, color: isColab ? Colors.purpleAccent : Colors.blueAccent),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF111827),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: isColab ? Colors.purpleAccent.withOpacity(0.4) : Colors.blueAccent.withOpacity(0.3)),
                           ),
-                          title: Text(op.client, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          subtitle: Text('Tarifa: ${op.clientType} • Estado: ${op.status}', style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                          trailing: Text('${op.amount.toStringAsFixed(2)} €', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: isColab ? Colors.purpleAccent.withOpacity(0.2) : Colors.blueAccent.withOpacity(0.2),
+                                child: Icon(Icons.person, color: isColab ? Colors.purpleAccent : Colors.blueAccent),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(cli['name'], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Tarifa: ${isColab ? "Colaborador (Especial)" : "Cliente Final (PVP)"} • ${cli['count']} op.',
+                                      style: TextStyle(color: isColab ? Colors.purpleAccent : Colors.grey, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text('${totalVentas.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 15)),
+                                  if (pendiente > 0)
+                                    Text('Debe: ${pendiente.toStringAsFixed(2)} €', style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
