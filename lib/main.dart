@@ -172,7 +172,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // DIÁLOGO DE PRODUCTO: PVP FIJO, PRECIO ESPECIAL COLABORADOR E HISTORIAL DE PROVEEDORES
+  // DIÁLOGO UNIFICADO DE PRODUCTO: PVP, ESPECIAL COLABORADOR, PROVEEDOR Y COSTO DE COMPRA
   void _showProductDialog(BuildContext context, {TransactionModel? existingProduct}) {
     final nameController = TextEditingController(text: existingProduct?.client ?? '');
     final pvpController = TextEditingController(
@@ -181,16 +181,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final specialController = TextEditingController(
       text: existingProduct != null && existingProduct.paidAmount > 0 ? existingProduct.paidAmount.toStringAsFixed(2) : '',
     );
-    final costController = TextEditingController(
-      text: existingProduct != null && existingProduct.paymentMode != 'Contado' ? existingProduct.paymentMode : '',
-    );
 
-    // Buscar compras a proveedores hechas para este producto
     final comprasProducto = existingProduct == null
         ? <TransactionModel>[]
         : _allTransactions
             .where((t) => t.type == 'COMPRA' && t.client.toLowerCase().contains(existingProduct.client.toLowerCase()))
             .toList();
+
+    final providerController = TextEditingController(
+      text: comprasProducto.isNotEmpty ? comprasProducto.first.clientType : '',
+    );
+    final costController = TextEditingController(
+      text: existingProduct != null && existingProduct.paymentMode != 'Contado' && double.tryParse(existingProduct.paymentMode) != null && double.parse(existingProduct.paymentMode) > 0
+          ? existingProduct.paymentMode
+          : '',
+    );
 
     showDialog(
       context: context,
@@ -249,11 +254,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
+                  controller: providerController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Proveedor al que se compró (ej. Prov. Madrid)',
+                    labelStyle: const TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                    filled: true,
+                    fillColor: const Color(0xFF1f2937),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
                   controller: costController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'Costo Compra Referencia (€)',
+                    labelText: 'Costo Compra de este Proveedor (€)',
                     labelStyle: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
                     filled: true,
                     fillColor: const Color(0xFF1f2937),
@@ -262,7 +279,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ),
                 if (comprasProducto.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  const Text('Historial de Proveedores:', style: TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const Text('Proveedores registrados para este producto:', style: TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   ...comprasProducto.map((c) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
@@ -286,17 +303,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 final name = nameController.text.trim();
                 final pvp = double.tryParse(pvpController.text.replaceAll(',', '.')) ?? 0.0;
                 final special = double.tryParse(specialController.text.replaceAll(',', '.')) ?? pvp;
+                final providerName = providerController.text.trim();
                 final cost = double.tryParse(costController.text.replaceAll(',', '.')) ?? 0.0;
 
                 if (name.isNotEmpty) {
+                  String fechaHoy = DateTime.now().toString().substring(0, 10);
+
                   if (existingProduct != null && existingProduct.id != null) {
                     await ErpController.instance.updateProduct(existingProduct.id!, name, pvp, special, cost);
                   } else {
-                    String fechaHoy = DateTime.now().toString().substring(0, 10);
                     final prodTx = TransactionModel(
                       type: 'PRODUCTO',
                       client: name,
-                      clientType: 'General',
+                      clientType: providerName.isNotEmpty ? providerName : 'General',
                       amount: pvp,
                       paidAmount: special,
                       paymentMode: cost.toStringAsFixed(2),
@@ -306,12 +325,35 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     );
                     await ErpController.instance.insertTransaction(prodTx);
                   }
+
+                  // Si indicó proveedor o costo de compra, unifica automáticamente el registro en Compras/Kardex
+                  if (providerName.isNotEmpty || cost > 0) {
+                    final provFinal = providerName.isNotEmpty ? providerName : 'Proveedor General';
+                    final yaExisteMismaCompra = comprasProducto.any(
+                      (c) => c.clientType.toLowerCase() == provFinal.toLowerCase() && (c.amount - cost).abs() < 0.01,
+                    );
+                    if (!yaExisteMismaCompra) {
+                      final compraTx = TransactionModel(
+                        type: 'COMPRA',
+                        client: '$name • Prov: $provFinal',
+                        clientType: provFinal,
+                        amount: cost,
+                        paidAmount: cost,
+                        paymentMode: 'Contado',
+                        hasDelivery: false,
+                        status: 'Completada',
+                        date: fechaHoy,
+                      );
+                      await ErpController.instance.insertTransaction(compraTx);
+                    }
+                  }
+
                   if (context.mounted) Navigator.pop(context);
                   await _refreshAllData();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Producto "$name" actualizado'),
+                        content: Text('Producto "$name" y proveedor sincronizados'),
                         backgroundColor: const Color(0xFF10B981),
                         duration: const Duration(seconds: 2),
                       ),
@@ -493,12 +535,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       String fechaHoy = DateTime.now().toString().substring(0, 10);
 
                       if (type == 'COMPRA') {
-                        // Guarda la compra vinculando el Producto y el Proveedor sin tocar el PVP de venta
                         String prodName = selectedProduct?.client ?? 'General';
                         final compraTx = TransactionModel(
                           type: 'COMPRA',
                           client: '$prodName • Prov: $rawName',
-                          clientType: rawName, // Nombre del proveedor
+                          clientType: rawName,
                           amount: amount,
                           paidAmount: amount,
                           paymentMode: paymentMode,
@@ -508,7 +549,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         );
                         await ErpController.instance.insertTransaction(compraTx);
 
-                        // Actualiza solo el costo de última compra en el producto (sin tocar PVP ni Especial)
                         if (selectedProduct != null && selectedProduct!.id != null) {
                           await ErpController.instance.updateProduct(
                             selectedProduct!.id!,
@@ -1147,6 +1187,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                           .where((t) => t.type == 'COMPRA' && t.client.toLowerCase().contains(prod.client.toLowerCase()))
                           .toList();
 
+                      final listaProveedores = comprasDeEsteProd.isNotEmpty
+                          ? comprasDeEsteProd.map((c) => "${c.clientType} (${c.amount.toStringAsFixed(2)}€)").toSet().join(" • ")
+                          : (prod.clientType != 'General' ? '${prod.clientType} (${prod.paymentMode}€)' : '');
+
                       return InkWell(
                         onTap: () => _showProductDialog(context, existingProduct: prod),
                         borderRadius: BorderRadius.circular(12),
@@ -1178,10 +1222,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                           Text('Especial Col.: ${prod.paidAmount.toStringAsFixed(2)} €', style: const TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 12)),
                                         ],
                                       ),
-                                      if (comprasDeEsteProd.isNotEmpty) ...[
+                                      if (listaProveedores.isNotEmpty) ...[
                                         const SizedBox(height: 4),
                                         Text(
-                                          'Proveedores: ${comprasDeEsteProd.map((c) => "${c.clientType} (${c.amount.toStringAsFixed(2)}€)").toSet().join(" • ")}',
+                                          'Proveedor: $listaProveedores',
                                           style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
