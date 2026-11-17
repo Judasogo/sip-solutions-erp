@@ -107,7 +107,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             side: BorderSide(color: Colors.blueAccent.withOpacity(0.35)),
           ),
           title: const Text(
-            'MENÚ RÁPIDO ERP',
+            'MENÚ RÁPIDO ERP v1.1',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.1),
           ),
@@ -172,7 +172,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // DIÁLOGO UNIFICADO DE PRODUCTO: PVP, ESPECIAL COLABORADOR, PROVEEDOR Y COSTO DE COMPRA
+  // DIÁLOGO UNIFICADO DE PRODUCTO: PVP, ESPECIAL COLABORADOR, PROVEEDOR Y COSTO
   void _showProductDialog(BuildContext context, {TransactionModel? existingProduct}) {
     final nameController = TextEditingController(text: existingProduct?.client ?? '');
     final pvpController = TextEditingController(
@@ -279,7 +279,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 ),
                 if (comprasProducto.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  const Text('Proveedores registrados para este producto:', style: TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const Text('Proveedores registrados:', style: TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 6),
                   ...comprasProducto.map((c) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
@@ -326,36 +326,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     await ErpController.instance.insertTransaction(prodTx);
                   }
 
-                  // Si indicó proveedor o costo de compra, unifica automáticamente el registro en Compras/Kardex
                   if (providerName.isNotEmpty || cost > 0) {
                     final provFinal = providerName.isNotEmpty ? providerName : 'Proveedor General';
-                    final yaExisteMismaCompra = comprasProducto.any(
-                      (c) => c.clientType.toLowerCase() == provFinal.toLowerCase() && (c.amount - cost).abs() < 0.01,
+                    final compraTx = TransactionModel(
+                      type: 'COMPRA',
+                      client: '$name • Prov: $provFinal',
+                      clientType: provFinal,
+                      amount: cost,
+                      paidAmount: cost,
+                      paymentMode: 'Contado',
+                      hasDelivery: false,
+                      status: 'Completada',
+                      date: fechaHoy,
                     );
-                    if (!yaExisteMismaCompra) {
-                      final compraTx = TransactionModel(
-                        type: 'COMPRA',
-                        client: '$name • Prov: $provFinal',
-                        clientType: provFinal,
-                        amount: cost,
-                        paidAmount: cost,
-                        paymentMode: 'Contado',
-                        hasDelivery: false,
-                        status: 'Completada',
-                        date: fechaHoy,
-                      );
-                      await ErpController.instance.insertTransaction(compraTx);
-                    }
+                    await ErpController.instance.insertTransaction(compraTx);
                   }
 
                   if (context.mounted) Navigator.pop(context);
                   await _refreshAllData();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Producto "$name" y proveedor sincronizados'),
-                        backgroundColor: const Color(0xFF10B981),
-                        duration: const Duration(seconds: 2),
+                      const SnackBar(
+                        content: Text('Producto y proveedor sincronizados'),
+                        backgroundColor: Color(0xFF10B981),
+                        duration: Duration(seconds: 2),
                       ),
                     );
                   }
@@ -369,7 +363,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // DIÁLOGO DE VENTA, COBRO Y COMPRA A MÚLTIPLES PROVEEDORES SIN ALTERAR EL PVP DE VENTA
   void _showAddTransactionDialog(BuildContext context, String type, {String? prefillClient, String? prefillClientType}) {
     final productos = _allTransactions.where((t) => t.type == 'PRODUCTO').toList();
     TransactionModel? selectedProduct = productos.isNotEmpty ? productos.first : null;
@@ -392,7 +385,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       nameHint = 'Nombre del Cliente o Colaborador';
     } else if (type == 'COMPRA') {
       titleLabel = 'Compra a Proveedor';
-      nameHint = 'Nombre del Proveedor (ej. Prov. Madrid, Mayorista...)';
+      nameHint = 'Nombre del Proveedor (ej. Prov. Madrid)';
     } else if (type == 'COBRO') {
       titleLabel = 'Nueva Cuenta por Cobrar';
       nameHint = 'Cliente / Colaborador Deudor';
@@ -582,7 +575,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('$titleLabel registrado (PVP sin cambios)'),
+                            content: Text('$titleLabel registrado'),
                             backgroundColor: const Color(0xFF10B981),
                             duration: const Duration(seconds: 2),
                           ),
@@ -1152,7 +1145,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // MÓDULO STOCK CON PVP FIJO, PRECIO ESPECIAL Y PROVEEDORES MÚLTIPLES POR PRODUCTO
   Widget _buildStockTab() {
     final productos = _allTransactions.where((t) => t.type == 'PRODUCTO').toList();
     return Padding(
