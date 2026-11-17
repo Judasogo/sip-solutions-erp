@@ -38,11 +38,62 @@ class ErpController {
 
         String fechaHoy = DateTime.now().toString().substring(0, 10);
 
-        await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Mónaco', 'client_type': 'General', 'amount': 37.0, 'paid_amount': 37.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Activo', 'date': fechaHoy});
-        await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Tíbet', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Stock Bajo', 'date': fechaHoy});
-        await db.insert('transactions', {'type': 'PRODUCTO', 'client': 'Granada', 'client_type': 'General', 'amount': 0.0, 'paid_amount': 0.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Stock Bajo', 'date': fechaHoy});
-        await db.insert('transactions', {'type': 'COMPRA', 'client': 'Proveedor Mónaco', 'client_type': 'Proveedor', 'amount': 37.0, 'paid_amount': 37.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Completada', 'date': fechaHoy});
-        await db.insert('transactions', {'type': 'VENTA', 'client': 'Mónaco', 'client_type': 'Cliente Final', 'amount': 90.0, 'paid_amount': 90.0, 'payment_mode': 'Contado', 'has_delivery': 0, 'status': 'Completada', 'date': fechaHoy});
+        // En PRODUCTO: amount = PVP Cliente Final, paid_amount = Precio Especial Colaborador, payment_mode = Costo Base
+        await db.insert('transactions', {
+          'type': 'PRODUCTO',
+          'client': 'Mónaco',
+          'client_type': 'General',
+          'amount': 90.0,
+          'paid_amount': 70.0,
+          'payment_mode': '37.00',
+          'has_delivery': 0,
+          'status': 'Activo',
+          'date': fechaHoy,
+        });
+        await db.insert('transactions', {
+          'type': 'PRODUCTO',
+          'client': 'Tíbet',
+          'client_type': 'General',
+          'amount': 0.0,
+          'paid_amount': 0.0,
+          'payment_mode': '0.00',
+          'has_delivery': 0,
+          'status': 'Stock Bajo',
+          'date': fechaHoy,
+        });
+        await db.insert('transactions', {
+          'type': 'PRODUCTO',
+          'client': 'Granada',
+          'client_type': 'General',
+          'amount': 0.0,
+          'paid_amount': 0.0,
+          'payment_mode': '0.00',
+          'has_delivery': 0,
+          'status': 'Stock Bajo',
+          'date': fechaHoy,
+        });
+        await db.insert('transactions', {
+          'type': 'COMPRA',
+          'client': 'Mónaco',
+          'client_type': 'Proveedor',
+          'amount': 37.0,
+          'paid_amount': 37.0,
+          'payment_mode': 'Contado',
+          'has_delivery': 0,
+          'status': 'Completada',
+          'date': fechaHoy,
+        });
+        await db.insert('transactions', {
+          'type': 'VENTA',
+          'client': 'Cliente General (Mónaco)',
+          'client_type': 'Cliente Final',
+          'amount': 90.0,
+          'paid_amount': 90.0,
+          'payment_mode': 'Contado',
+          'has_delivery': 0,
+          'status': 'Completada',
+          'date': fechaHoy,
+        });
       },
     );
   }
@@ -68,7 +119,62 @@ class ErpController {
 
   Future<int> insertTransaction(TransactionModel transaction) async {
     final db = await instance.database;
+
+    // RETROALIMENTACIÓN ENTRE MÓDULOS
+    if (transaction.type == 'PRODUCTO') {
+      // Si el producto ya existe, lo actualiza en lugar de duplicarlo
+      final existing = await db.query(
+        'transactions',
+        where: 'type = ? AND LOWER(client) = ?',
+        whereArgs: ['PRODUCTO', transaction.client.toLowerCase()],
+      );
+      if (existing.isNotEmpty) {
+        return await db.update(
+          'transactions',
+          transaction.toMap(),
+          where: 'id = ?',
+          whereArgs: [existing.first['id']],
+        );
+      }
+    } else if (transaction.type == 'COMPRA') {
+      // Si se compra un producto registrado en Stock, activa su estado y actualiza su costo base
+      final existingProd = await db.query(
+        'transactions',
+        where: 'type = ? AND LOWER(client) = ?',
+        whereArgs: ['PRODUCTO', transaction.client.toLowerCase()],
+      );
+      if (existingProd.isNotEmpty) {
+        double currentPvp = (existingProd.first['amount'] as num?)?.toDouble() ?? 0.0;
+        await db.update(
+          'transactions',
+          {
+            'status': 'Activo',
+            'payment_mode': transaction.amount.toStringAsFixed(2),
+            if (currentPvp <= 0) 'amount': transaction.amount,
+          },
+          where: 'id = ?',
+          whereArgs: [existingProd.first['id']],
+        );
+      }
+    }
+
     return await db.insert('transactions', transaction.toMap());
+  }
+
+  Future<int> updateProduct(int id, String name, double pvp, double specialPrice, double cost) async {
+    final db = await instance.database;
+    return await db.update(
+      'transactions',
+      {
+        'client': name,
+        'amount': pvp,
+        'paid_amount': specialPrice,
+        'payment_mode': cost.toStringAsFixed(2),
+        'status': pvp > 0 ? 'Activo' : 'Stock Bajo',
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<int> markCobroAsPaid(int id, double amount) async {
