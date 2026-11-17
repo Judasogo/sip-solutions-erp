@@ -95,12 +95,14 @@ jobs:
       - name: Compilar APK en modo Release sin Shrinking
         run: flutter build apk --release --no-shrink
 
-      - name: Renombrar APK resultante
-        run: |
-          cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/ERP_Juan_v1.0.apk"
+          - name: Renombrar APK resultante
+      run: |
+        cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/ERP_Juan_v1.1.apk"
 
-      - name: Subir Artifact del APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ERP_Juan_v1.0
-          path: build/app/outputs/flutter-apk/ERP_Juan_v1.0.apk
+    - name: Subir Artifact del APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: ERP_Juan_v1.1.apk
+        path: build/app/outputs/flutter-apk/ERP_Juan_v1.1.apk
+
+
