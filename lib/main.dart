@@ -80,7 +80,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _exportData() async {
     final buffer = StringBuffer();
-    buffer.writeln('ID;MODULO;CLIENTE_PRODUCTO;TARIFA;IMPORTE_PVP;PRECIO_COLAB_PAGO;PAGO_COSTO;ESTADO;FECHA');
+    buffer.writeln('ID;MODULO;CONCEPTO_PRODUCTO;PROVEEDOR_TARIFA;IMPORTE_PVP;PRECIO_COLAB_PAGO;METODO_COSTO;ESTADO;FECHA');
     for (var tx in _allTransactions) {
       buffer.writeln('${tx.id ?? ""};${tx.type};${tx.client};${tx.clientType};${tx.amount.toStringAsFixed(2)};${tx.paidAmount.toStringAsFixed(2)};${tx.paymentMode};${tx.status};${tx.date}');
     }
@@ -96,7 +96,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  // MENÚ RÁPIDO ERP (BOTÓN "+" DEL BANNER Y BOTÓN FLOTANTE)
   void _showQuickMenu(BuildContext context) {
     showDialog(
       context: context,
@@ -125,14 +124,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 _showAddTransactionDialog(context, 'VENTA');
               }),
               const SizedBox(height: 10),
+              _buildQuickMenuItem(Icons.add_shopping_cart, 'Compra a Proveedor', Colors.orangeAccent, () {
+                Navigator.pop(context);
+                _showAddTransactionDialog(context, 'COMPRA');
+              }),
+              const SizedBox(height: 10),
               _buildQuickMenuItem(Icons.inventory_2_outlined, 'Nuevo Producto (PVP / Especial)', const Color(0xFF3B82F6), () {
                 Navigator.pop(context);
                 _showProductDialog(context);
-              }),
-              const SizedBox(height: 10),
-              _buildQuickMenuItem(Icons.add_shopping_cart, 'Registrar Compra Stock', Colors.orangeAccent, () {
-                Navigator.pop(context);
-                _showAddTransactionDialog(context, 'COMPRA');
               }),
             ],
           ),
@@ -173,7 +172,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // DIÁLOGO DEDICADO PARA PRODUCTOS CON PVP Y PRECIO ESPECIAL COLABORADOR
+  // DIÁLOGO DE PRODUCTO: PVP FIJO, PRECIO ESPECIAL COLABORADOR E HISTORIAL DE PROVEEDORES
   void _showProductDialog(BuildContext context, {TransactionModel? existingProduct}) {
     final nameController = TextEditingController(text: existingProduct?.client ?? '');
     final pvpController = TextEditingController(
@@ -186,6 +185,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       text: existingProduct != null && existingProduct.paymentMode != 'Contado' ? existingProduct.paymentMode : '',
     );
 
+    // Buscar compras a proveedores hechas para este producto
+    final comprasProducto = existingProduct == null
+        ? <TransactionModel>[]
+        : _allTransactions
+            .where((t) => t.type == 'COMPRA' && t.client.toLowerCase().contains(existingProduct.client.toLowerCase()))
+            .toList();
+
     showDialog(
       context: context,
       builder: (context) {
@@ -196,18 +202,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             side: BorderSide(color: Colors.blueAccent.withOpacity(0.4)),
           ),
           title: Text(
-            existingProduct == null ? 'Nuevo Producto en Stock' : 'Editar Tarifas: ${existingProduct.client}',
+            existingProduct == null ? 'Nuevo Producto en Stock' : 'Tarifas & Proveedores: ${existingProduct.client}',
             style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 TextField(
                   controller: nameController,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'Nombre del Producto (ej. Mónaco, Tíbet)',
+                    labelText: 'Nombre del Producto (ej. Tíbet)',
                     labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
                     filled: true,
                     fillColor: const Color(0xFF1f2937),
@@ -220,7 +227,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'PVP Cliente Final (€)',
+                    labelText: 'PVP Cliente Final (€) [Fijo]',
                     labelStyle: const TextStyle(color: Color(0xFF10B981), fontSize: 12, fontWeight: FontWeight.bold),
                     filled: true,
                     fillColor: const Color(0xFF1f2937),
@@ -233,7 +240,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'Precio Especial Colaborador (€)',
+                    labelText: 'Precio Especial Colaborador (€) [Fijo]',
                     labelStyle: const TextStyle(color: Colors.purpleAccent, fontSize: 12, fontWeight: FontWeight.bold),
                     filled: true,
                     fillColor: const Color(0xFF1f2937),
@@ -246,13 +253,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    labelText: 'Costo Compra Base (€) (Opcional)',
-                    labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                    labelText: 'Costo Compra Referencia (€)',
+                    labelStyle: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
                     filled: true,
                     fillColor: const Color(0xFF1f2937),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                   ),
                 ),
+                if (comprasProducto.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text('Historial de Proveedores:', style: TextStyle(color: Colors.orangeAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  ...comprasProducto.map((c) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '• ${c.clientType}: ${c.amount.toStringAsFixed(2)} € (${c.date})',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      )),
+                ],
               ],
             ),
           ),
@@ -292,7 +311,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Producto "$name" actualizado en Stock'),
+                        content: Text('Producto "$name" actualizado'),
                         backgroundColor: const Color(0xFF10B981),
                         duration: const Duration(seconds: 2),
                       ),
@@ -300,7 +319,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   }
                 }
               },
-              child: const Text('Guardar Producto', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text('Guardar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -308,19 +327,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // DIÁLOGO DE VENTA, COBRO Y COMPRA RETROALIMENTADO CON EL CATÁLOGO
+  // DIÁLOGO DE VENTA, COBRO Y COMPRA A MÚLTIPLES PROVEEDORES SIN ALTERAR EL PVP DE VENTA
   void _showAddTransactionDialog(BuildContext context, String type, {String? prefillClient, String? prefillClientType}) {
     final productos = _allTransactions.where((t) => t.type == 'PRODUCTO').toList();
     TransactionModel? selectedProduct = productos.isNotEmpty ? productos.first : null;
 
     final TextEditingController clientController = TextEditingController(text: prefillClient ?? '');
-    final TextEditingController amountController = TextEditingController(
-      text: (type == 'VENTA' || type == 'COBRO') && selectedProduct != null && selectedProduct.amount > 0
-          ? selectedProduct.amount.toStringAsFixed(2)
-          : '',
-    );
+    final TextEditingController amountController = TextEditingController();
 
-    String clientType = prefillClientType ?? (type == 'VENTA' || type == 'COBRO' ? 'Cliente Final' : 'General');
+    String clientType = prefillClientType ?? (type == 'VENTA' || type == 'COBRO' ? 'Cliente Final' : 'Proveedor');
     String paymentMode = 'Contado';
 
     if ((type == 'VENTA' || type == 'COBRO') && selectedProduct != null) {
@@ -334,8 +349,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       titleLabel = 'Registrar Venta';
       nameHint = 'Nombre del Cliente o Colaborador';
     } else if (type == 'COMPRA') {
-      titleLabel = 'Registrar Compra Stock';
-      nameHint = 'Producto comprado (ej. Tíbet)';
+      titleLabel = 'Compra a Proveedor';
+      nameHint = 'Nombre del Proveedor (ej. Prov. Madrid, Mayorista...)';
     } else if (type == 'COBRO') {
       titleLabel = 'Nueva Cuenta por Cobrar';
       nameHint = 'Cliente / Colaborador Deudor';
@@ -347,7 +362,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             void updateAutoPrice(TransactionModel? prod, String cType) {
-              if (prod == null) return;
+              if (prod == null || type == 'COMPRA') return;
               double price = cType == 'Colaborador' ? prod.paidAmount : prod.amount;
               if (price > 0) {
                 amountController.text = price.toStringAsFixed(2);
@@ -365,12 +380,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if ((type == 'VENTA' || type == 'COBRO') && productos.isNotEmpty) ...[
+                    if (productos.isNotEmpty) ...[
                       DropdownButtonFormField<TransactionModel>(
                         value: selectedProduct,
                         dropdownColor: const Color(0xFF1f2937),
                         decoration: InputDecoration(
-                          labelText: 'Producto del Stock',
+                          labelText: type == 'COMPRA' ? 'Producto Comprado' : 'Producto del Stock',
                           labelStyle: const TextStyle(color: Colors.blueAccent, fontSize: 12),
                           filled: true,
                           fillColor: const Color(0xFF1f2937),
@@ -379,7 +394,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         items: productos.map((p) {
                           return DropdownMenuItem(
                             value: p,
-                            child: Text('${p.client} (PVP ${p.amount.toStringAsFixed(0)}€ / Col ${p.paidAmount.toStringAsFixed(0)}€)', style: const TextStyle(fontSize: 12)),
+                            child: Text(
+                              type == 'COMPRA'
+                                  ? '${p.client} (PVP Venta: ${p.amount.toStringAsFixed(0)}€)'
+                                  : '${p.client} (PVP ${p.amount.toStringAsFixed(0)}€ / Col ${p.paidAmount.toStringAsFixed(0)}€)',
+                              style: const TextStyle(fontSize: 12),
+                            ),
                           );
                         }).toList(),
                         onChanged: (val) {
@@ -432,32 +452,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        labelText: 'Importe Total (€)',
-                        labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                        labelText: type == 'COMPRA' ? 'Precio de Compra de este Proveedor (€)' : 'Importe Total (€)',
+                        labelStyle: TextStyle(color: type == 'COMPRA' ? Colors.orangeAccent : Colors.grey, fontSize: 12),
                         filled: true,
                         fillColor: const Color(0xFF1f2937),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                       ),
                     ),
-                    if (type == 'VENTA' || type == 'COBRO') ...[
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: paymentMode,
-                        dropdownColor: const Color(0xFF1f2937),
-                        decoration: InputDecoration(
-                          labelText: 'Método de Pago',
-                          labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
-                          filled: true,
-                          fillColor: const Color(0xFF1f2937),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'Contado', child: Text('Contado / Efectivo')),
-                          DropdownMenuItem(value: 'Bizum', child: Text('Bizum')),
-                        ],
-                        onChanged: (val) => setDialogState(() => paymentMode = val!),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: paymentMode,
+                      dropdownColor: const Color(0xFF1f2937),
+                      decoration: InputDecoration(
+                        labelText: 'Método de Pago',
+                        labelStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+                        filled: true,
+                        fillColor: const Color(0xFF1f2937),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                       ),
-                    ],
+                      items: const [
+                        DropdownMenuItem(value: 'Contado', child: Text('Contado / Efectivo')),
+                        DropdownMenuItem(value: 'Bizum', child: Text('Bizum')),
+                      ],
+                      onChanged: (val) => setDialogState(() => paymentMode = val!),
+                    ),
                   ],
                 ),
               ),
@@ -473,28 +491,58 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     final amount = double.tryParse(amountController.text.replaceAll(',', '.')) ?? 0.0;
                     if (rawName.isNotEmpty && amount >= 0) {
                       String fechaHoy = DateTime.now().toString().substring(0, 10);
-                      String finalConcept = (type == 'VENTA' || type == 'COBRO') && selectedProduct != null
-                          ? '$rawName (${selectedProduct!.client})'
-                          : rawName;
 
-                      final nuevaTx = TransactionModel(
-                        type: type,
-                        client: finalConcept,
-                        clientType: clientType,
-                        amount: amount,
-                        paidAmount: type == 'COBRO' ? 0.0 : amount,
-                        paymentMode: paymentMode,
-                        hasDelivery: false,
-                        status: type == 'COBRO' ? 'Pendiente' : 'Completada',
-                        date: fechaHoy,
-                      );
-                      await ErpController.instance.insertTransaction(nuevaTx);
+                      if (type == 'COMPRA') {
+                        // Guarda la compra vinculando el Producto y el Proveedor sin tocar el PVP de venta
+                        String prodName = selectedProduct?.client ?? 'General';
+                        final compraTx = TransactionModel(
+                          type: 'COMPRA',
+                          client: '$prodName • Prov: $rawName',
+                          clientType: rawName, // Nombre del proveedor
+                          amount: amount,
+                          paidAmount: amount,
+                          paymentMode: paymentMode,
+                          hasDelivery: false,
+                          status: 'Completada',
+                          date: fechaHoy,
+                        );
+                        await ErpController.instance.insertTransaction(compraTx);
+
+                        // Actualiza solo el costo de última compra en el producto (sin tocar PVP ni Especial)
+                        if (selectedProduct != null && selectedProduct!.id != null) {
+                          await ErpController.instance.updateProduct(
+                            selectedProduct!.id!,
+                            selectedProduct!.client,
+                            selectedProduct!.amount,
+                            selectedProduct!.paidAmount,
+                            amount,
+                          );
+                        }
+                      } else {
+                        String finalConcept = selectedProduct != null
+                            ? '$rawName (${selectedProduct!.client})'
+                            : rawName;
+
+                        final nuevaTx = TransactionModel(
+                          type: type,
+                          client: finalConcept,
+                          clientType: clientType,
+                          amount: amount,
+                          paidAmount: type == 'COBRO' ? 0.0 : amount,
+                          paymentMode: paymentMode,
+                          hasDelivery: false,
+                          status: type == 'COBRO' ? 'Pendiente' : 'Completada',
+                          date: fechaHoy,
+                        );
+                        await ErpController.instance.insertTransaction(nuevaTx);
+                      }
+
                       if (context.mounted) Navigator.pop(context);
                       await _refreshAllData();
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('$titleLabel guardado y sincronizado'),
+                            content: Text('$titleLabel registrado (PVP sin cambios)'),
                             backgroundColor: const Color(0xFF10B981),
                             duration: const Duration(seconds: 2),
                           ),
@@ -919,7 +967,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                const Text('Simula precios para Cliente Final o Colaborador.', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                const Text('Simula margen según el costo de cada proveedor.', style: TextStyle(color: Colors.grey, fontSize: 11)),
                 const SizedBox(height: 14),
                 Row(
                   children: [
@@ -928,7 +976,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         controller: _costController,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         decoration: const InputDecoration(
-                          labelText: 'Costo Unitario (€)',
+                          labelText: 'Costo Proveedor (€)',
                           labelStyle: TextStyle(fontSize: 12, color: Colors.grey),
                           filled: true,
                           fillColor: Color(0xFF1f2937),
@@ -1064,7 +1112,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // MÓDULO STOCK CON PVP Y PRECIO ESPECIAL COLABORADOR EDITABLE
+  // MÓDULO STOCK CON PVP FIJO, PRECIO ESPECIAL Y PROVEEDORES MÚLTIPLES POR PRODUCTO
   Widget _buildStockTab() {
     final productos = _allTransactions.where((t) => t.type == 'PRODUCTO').toList();
     return Padding(
@@ -1085,7 +1133,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          const Text('Toca un producto para editar su PVP y Precio Especial Colaborador.', style: TextStyle(color: Colors.grey, fontSize: 11)),
+          const Text('PVP y Especial son fijos; los costos varían según proveedor.', style: TextStyle(color: Colors.grey, fontSize: 11)),
           const SizedBox(height: 12),
           Expanded(
             child: productos.isEmpty
@@ -1095,6 +1143,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     itemBuilder: (context, index) {
                       final prod = productos[index];
                       final isLow = prod.amount <= 0;
+                      final comprasDeEsteProd = _allTransactions
+                          .where((t) => t.type == 'COMPRA' && t.client.toLowerCase().contains(prod.client.toLowerCase()))
+                          .toList();
+
                       return InkWell(
                         onTap: () => _showProductDialog(context, existingProduct: prod),
                         borderRadius: BorderRadius.circular(12),
@@ -1118,7 +1170,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                     const SizedBox(height: 4),
                                     if (isLow)
                                       const Text('Sin tarifa asignada • Toca para configurar PVP', style: TextStyle(color: Colors.amber, fontSize: 11))
-                                    else
+                                    else ...[
                                       Row(
                                         children: [
                                           Text('PVP: ${prod.amount.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12)),
@@ -1126,6 +1178,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                           Text('Especial Col.: ${prod.paidAmount.toStringAsFixed(2)} €', style: const TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold, fontSize: 12)),
                                         ],
                                       ),
+                                      if (comprasDeEsteProd.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Proveedores: ${comprasDeEsteProd.map((c) => "${c.clientType} (${c.amount.toStringAsFixed(2)}€)").toSet().join(" • ")}',
+                                          style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ],
                                   ],
                                 ),
                               ),
@@ -1208,7 +1270,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                           subtitle: Text(
                             tx.type == 'PRODUCTO'
                                 ? 'PRODUCTO • PVP: ${tx.amount.toStringAsFixed(2)} € | Col: ${tx.paidAmount.toStringAsFixed(2)} €'
-                                : '${tx.type} • ${tx.clientType} (${tx.paymentMode}) • ${tx.date}',
+                                : tx.type == 'COMPRA'
+                                    ? 'COMPRA • Proveedor: ${tx.clientType} (${tx.paymentMode}) • ${tx.date}'
+                                    : '${tx.type} • ${tx.clientType} (${tx.paymentMode}) • ${tx.date}',
                             style: const TextStyle(color: Colors.grey, fontSize: 11),
                           ),
                           trailing: Row(
@@ -1235,11 +1299,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // MÓDULO CLIENTES & COLABORADORES AGRUPADO Y RETROALIMENTADO
   Widget _buildClientesTab() {
     final operacionesClientes = _allTransactions.where((t) => t.type == 'VENTA' || t.type == 'COBRO').toList();
 
-    // Agrupa por nombre de cliente (extrayendo el nombre antes del paréntesis de producto)
     final Map<String, Map<String, dynamic>> clientesMap = {};
     for (var op in operacionesClientes) {
       String cleanName = op.client.contains('(') ? op.client.split('(').first.trim() : op.client.trim();
@@ -1285,7 +1347,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          const Text('Toca un cliente o colaborador para registrarle una venta directa con su tarifa.', style: TextStyle(color: Colors.grey, fontSize: 11)),
+          const Text('Toca un cliente o colaborador para registrarle una venta con su tarifa.', style: TextStyle(color: Colors.grey, fontSize: 11)),
           const SizedBox(height: 12),
           Expanded(
             child: listaClientes.isEmpty
