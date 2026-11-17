@@ -1,108 +1,42 @@
-name: Build ERP Juan v1.0 Production Fix
+name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [ "main" ]
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    env:
-      JAVA_VERSION: "17"
-      FLUTTER_VERSION: "3.19.5"
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-      ANDROID_HOME: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: "17"
+          distribution: 'zulu'
+          java-version: '17'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.19.5"
-          channel: stable
+          flutter-version: '3.x'
+          channel: 'stable'
           cache: true
 
-      - name: Install Android SDK commandline tools
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p "$ANDROID_SDK_ROOT"
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-
-          if [ ! -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-            mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-            cd /tmp
-            curl -fLo cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -qo cmdline-tools.zip
-            rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-            mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-            mv cmdline-tools/* "$ANDROID_SDK_ROOT/cmdline-tools/latest/"
-          fi
-
-      - name: Accept Android SDK licenses
-        shell: bash
-        run: |
-          set -euxo pipefail
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          yes | sdkmanager --licenses >/dev/null || true
-
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          set -euxo pipefail
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
-
-      - name: Configurar estructura Android y SDK Min 21
-        run: |
-          if [ ! -d "android" ]; then
-            flutter create . --platforms=android --org com.erpjuan --project-name erp_juan
-          fi
-          
-          if [ -f "android/app/build.gradle" ]; then
-            sed -i 's/minSdkVersion.*/minSdkVersion 21/g' android/app/build.gradle || true
-            sed -i 's/minSdk.*/minSdk = 21/g' android/app/build.gradle || true
-          fi
-          
-          if [ -f "android/app/src/main/AndroidManifest.xml" ]; then
-            sed -i 's/android:label="[^"]*"/android:label="ERP Juan v1.0"/g' android/app/src/main/AndroidManifest.xml || true
-          fi
-
-      - name: Instalar dependencias de Flutter
+      - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Dar permisos de ejecución a Gradle Wrapper
-        run: |
-          if [ -f "android/gradlew" ]; then
-            chmod +x android/gradlew
-          fi
-
-      - name: Compilar APK en modo Release sin Shrinking
+      - name: Compilar APK en Release
         run: flutter build apk --release --no-shrink
 
-          - name: Renombrar APK resultante
-      run: |
-        cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/ERP_Juan_v1.1.apk"
+      - name: Renombrar APK resultante
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/ERP_Juan_v1.1.apk"
 
-    - name: Subir Artifact del APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: ERP_Juan_v1.1.apk
-        path: build/app/outputs/flutter-apk/ERP_Juan_v1.1.apk
-
-
+      - name: Subir Artifact del APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ERP_Juan_v1.1.apk
+          path: build/app/outputs/flutter-apk/ERP_Juan_v1.1.apk
