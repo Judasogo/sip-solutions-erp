@@ -26,7 +26,8 @@ jobs:
           cache: true
 
       - name: Inicializar plataforma Android
-        run: flutter create . --platforms=android --org com.sip.erp
+          flutter create . --platforms=android --org com.sip.erp
+          echo "ndk.dir=$ANDROID_NDK_LATEST_HOME" >> android/local.properties
 
       - name: Instalar dependencias
         run: flutter pub get
