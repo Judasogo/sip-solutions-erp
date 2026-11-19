@@ -384,7 +384,7 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Acciones Rápidas ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text('Acciones & Módulos ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -424,6 +424,24 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
               ],
             ),
             const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.inventory_2_outlined, color: Color(0xFF60A5FA)),
+              title: const Text('Inventario & Tarifas', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Productos, precios PVP / Especial Colaborador y stock', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo)));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.people_alt_outlined, color: Color(0xFF10B981)),
+              title: const Text('Clientes & Colaboradores', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Base de datos autorrellenable y tarifas', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => ClientesScreen(onChanged: _refrescarTodo)));
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.calculate_outlined, color: Colors.amberAccent),
               title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
@@ -587,54 +605,57 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
 
               const SizedBox(height: 14),
 
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A151D),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.35)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '$vencidasCount Deuda(s) Vencida(s) · Cobrar ${porCobrarTotal.toStringAsFixed(0)} €',
-                        style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CobrosScreen(onChanged: _refrescarTodo))),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A151D),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.35)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$vencidasCount Deuda(s) Vencida(s) · Cobrar ${porCobrarTotal.toStringAsFixed(0)} €',
+                          style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                        ),
                       ),
-                    ),
-                    GestureDetector(
-                      onTap: _exportarResumen,
-                      child: const Row(
-                        children: [
-                          Icon(Icons.download_rounded, color: Color(0xFF60A5FA), size: 16),
-                          SizedBox(width: 4),
-                          Text('Exportar', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
-                        ],
+                      GestureDetector(
+                        onTap: _exportarResumen,
+                        child: const Row(
+                          children: [
+                            Icon(Icons.download_rounded, color: Color(0xFF60A5FA), size: 16),
+                            SizedBox(width: 4),
+                            Text('Exportar', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 
               const SizedBox(height: 14),
 
+              // 4 Tarjetas KPI 100% operativas al dar clic
               Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
+                    child: _kpiTarjeta(
+                      titulo: 'Por Cobrar',
+                      valor: '${porCobrarTotal.toStringAsFixed(2)} €',
+                      subtitulo: '$vencidasCount Vencidas (${vencidasTotal.toStringAsFixed(0)} €)',
+                      subColor: const Color(0xFFEF4444),
+                      icono: Icons.access_time_rounded,
+                      iconColor: const Color(0xFFEF4444),
+                      bordeColor: const Color(0xFFEF4444).withOpacity(0.45),
+                      showWarningIcon: true,
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CobrosScreen(onChanged: _refrescarTodo))),
-                      child: _kpiTarjeta(
-                        titulo: 'Por Cobrar',
-                        valor: '${porCobrarTotal.toStringAsFixed(2)} €',
-                        subtitulo: '$vencidasCount Vencidas (${vencidasTotal.toStringAsFixed(0)} €)',
-                        subColor: const Color(0xFFEF4444),
-                        icono: Icons.access_time_rounded,
-                        iconColor: const Color(0xFFEF4444),
-                        bordeColor: const Color(0xFFEF4444).withOpacity(0.45),
-                        showWarningIcon: true,
-                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -648,6 +669,7 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
                       iconColor: const Color(0xFF60A5FA),
                       bordeColor: Colors.white10,
                       showTrendIcon: true,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => KardexScreen(onChanged: _refrescarTodo, filtroInicial: 'VENTA'))),
                     ),
                   ),
                 ],
@@ -656,32 +678,28 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
               Row(
                 children: [
                   Expanded(
-                    child: GestureDetector(
+                    child: _kpiTarjeta(
+                      titulo: 'Valor Stock',
+                      valor: '${valorStock.toStringAsFixed(2)} €',
+                      subtitulo: 'En inventario activo',
+                      subColor: Colors.grey[400]!,
+                      icono: Icons.view_in_ar_rounded,
+                      iconColor: const Color(0xFF60A5FA),
+                      bordeColor: Colors.white10,
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo))),
-                      child: _kpiTarjeta(
-                        titulo: 'Valor Stock',
-                        valor: '${valorStock.toStringAsFixed(2)} €',
-                        subtitulo: 'En inventario activo',
-                        subColor: Colors.grey[400]!,
-                        icono: Icons.view_in_ar_rounded,
-                        iconColor: const Color(0xFF60A5FA),
-                        bordeColor: Colors.white10,
-                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo))),
-                      child: _kpiTarjeta(
-                        titulo: 'Stock Bajo',
-                        valor: '$stockBajoCount Prod.',
-                        subtitulo: 'Requieren reposición',
-                        subColor: const Color(0xFFF59E0B),
-                        icono: Icons.error_outline_rounded,
-                        iconColor: const Color(0xFFF59E0B),
-                        bordeColor: Colors.white10,
-                      ),
+                    child: _kpiTarjeta(
+                      titulo: 'Stock Bajo',
+                      valor: '$stockBajoCount Prod.',
+                      subtitulo: 'Requieren reposición',
+                      subColor: const Color(0xFFF59E0B),
+                      icono: Icons.error_outline_rounded,
+                      iconColor: const Color(0xFFF59E0B),
+                      bordeColor: Colors.white10,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo, soloStockBajo: true))),
                     ),
                   ),
                 ],
@@ -954,49 +972,57 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
     required IconData icono,
     required Color iconColor,
     required Color bordeColor,
+    required VoidCallback onTap,
     bool showWarningIcon = false,
     bool showTrendIcon = false,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF121927),
+    return Material(
+      color: const Color(0xFF121927),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: bordeColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(titulo, style: TextStyle(fontSize: 12, color: Colors.grey[400], fontWeight: FontWeight.w500)),
-              Icon(icono, size: 18, color: iconColor),
-            ],
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: bordeColor),
           ),
-          const SizedBox(height: 10),
-          Text(valor, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(height: 6),
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (showWarningIcon) ...[
-                Icon(Icons.warning_amber_rounded, size: 13, color: subColor),
-                const SizedBox(width: 4),
-              ],
-              if (showTrendIcon) ...[
-                Icon(Icons.trending_up_rounded, size: 14, color: subColor),
-                const SizedBox(width: 4),
-              ],
-              Expanded(
-                child: Text(
-                  subtitulo,
-                  style: TextStyle(fontSize: 11, color: subColor, fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(titulo, style: TextStyle(fontSize: 12, color: Colors.grey[400], fontWeight: FontWeight.w500)),
+                  Icon(icono, size: 18, color: iconColor),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(valor, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.white)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  if (showWarningIcon) ...[
+                    Icon(Icons.warning_amber_rounded, size: 13, color: subColor),
+                    const SizedBox(width: 4),
+                  ],
+                  if (showTrendIcon) ...[
+                    Icon(Icons.trending_up_rounded, size: 14, color: subColor),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(
+                    child: Text(
+                      subtitulo,
+                      style: TextStyle(fontSize: 11, color: subColor, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1097,7 +1123,8 @@ class LineChartPainter extends CustomPainter {
 
 class StockScreen extends StatefulWidget {
   final VoidCallback onChanged;
-  const StockScreen({super.key, required this.onChanged});
+  final bool soloStockBajo;
+  const StockScreen({super.key, required this.onChanged, this.soloStockBajo = false});
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -1105,17 +1132,25 @@ class StockScreen extends StatefulWidget {
 
 class _StockScreenState extends State<StockScreen> {
   List productos = [];
+  late bool filtrarBajo;
 
   @override
   void initState() {
     super.initState();
+    filtrarBajo = widget.soloStockBajo;
     _cargar();
   }
 
   Future<void> _cargar() async {
     final db = await DatabaseHelper.instance.database;
     final res = await db.query('productos', orderBy: 'nombre ASC');
-    if (mounted) setState(() => productos = res);
+    if (mounted) {
+      setState(() {
+        productos = filtrarBajo
+            ? res.where((p) => ((p['stock'] as int?) ?? 0) <= 3).toList()
+            : res;
+      });
+    }
   }
 
   void _dialogoProducto([Map? prod]) {
@@ -1227,8 +1262,17 @@ class _StockScreenState extends State<StockScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inventario & Tarifas', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(filtrarBajo ? 'Stock Bajo (<= 3 uds)' : 'Inventario & Tarifas', style: const TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF0A0F1A),
+        actions: [
+          TextButton(
+            onPressed: () {
+              setState(() => filtrarBajo = !filtrarBajo);
+              _cargar();
+            },
+            child: Text(filtrarBajo ? 'Ver Todos' : 'Stock Bajo', style: const TextStyle(color: Color(0xFFF59E0B), fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF2F81F7),
@@ -1249,13 +1293,13 @@ class _StockScreenState extends State<StockScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
             child: Text(
-              'Toca el lápiz para editar PVP, Precio Colaborador o stock.',
+              'Toca el lápiz para editar PVP, Precio Colaborador o reponer stock.',
               style: TextStyle(color: Colors.grey[400], fontSize: 12),
             ),
           ),
           Expanded(
             child: productos.isEmpty
-                ? const Center(child: Text('Pulsa + para añadir tus productos al inventario.', style: TextStyle(color: Colors.grey)))
+                ? const Center(child: Text('No hay productos en esta vista. Pulsa + para añadir.', style: TextStyle(color: Colors.grey)))
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(14, 0, 14, 80),
                     itemCount: productos.length,
@@ -1424,19 +1468,21 @@ class _CobrosScreenState extends State<CobrosScreen> {
 
 class KardexScreen extends StatefulWidget {
   final VoidCallback onChanged;
-  const KardexScreen({super.key, required this.onChanged});
+  final String filtroInicial;
+  const KardexScreen({super.key, required this.onChanged, this.filtroInicial = 'TODOS'});
 
   @override
   State<KardexScreen> createState() => _KardexScreenState();
 }
 
 class _KardexScreenState extends State<KardexScreen> {
-  String filtro = 'TODOS';
+  late String filtro;
   List movimientos = [];
 
   @override
   void initState() {
     super.initState();
+    filtro = widget.filtroInicial;
     _cargar();
   }
 
