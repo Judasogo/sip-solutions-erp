@@ -152,6 +152,88 @@ Widget _botonGuardarBusiness({required String texto, required VoidCallback onPre
   );
 }
 
+Widget _barraNavegacionOperativa({
+  required BuildContext context,
+  required String activa,
+  required VoidCallback onRefrescar,
+}) {
+  void irA(String destino) {
+    if (destino == activa) return;
+    if (destino == 'Inicio') {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      onRefrescar();
+      return;
+    }
+    Widget pantalla;
+    if (destino == 'Cobros') {
+      pantalla = CobrosScreen(onChanged: onRefrescar);
+    } else if (destino == 'Stock') {
+      pantalla = StockScreen(onChanged: onRefrescar);
+    } else if (destino == 'Kardex') {
+      pantalla = KardexScreen(onChanged: onRefrescar);
+    } else {
+      pantalla = ClientesScreen(onChanged: onRefrescar);
+    }
+
+    if (activa == 'Inicio') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
+    } else {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => pantalla));
+    }
+  }
+
+  Widget item(String label, IconData icon) {
+    final esActiva = activa == label;
+    final color = esActiva ? const Color(0xFF60A5FA) : Colors.grey[400]!;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => irA(label),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: esActiva ? FontWeight.bold : FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  return Container(
+    margin: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xFF121927),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: const Color(0xFF23304A)),
+      boxShadow: [
+        BoxShadow(color: Colors.black.withOpacity(0.45), blurRadius: 14, offset: const Offset(0, 6)),
+      ],
+    ),
+    child: Row(
+      children: [
+        item('Inicio', Icons.home_rounded),
+        item('Cobros', Icons.schedule_rounded),
+        item('Stock', Icons.inventory_2_outlined),
+        item('Kardex', Icons.receipt_long_outlined),
+        item('Clientes', Icons.people_alt_outlined),
+      ],
+    ),
+  );
+}
+
 class DashboardPrincipal extends StatefulWidget {
   const DashboardPrincipal({super.key});
 
@@ -302,7 +384,7 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Acciones & Módulos ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text('Acciones Rápidas ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -341,25 +423,7 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            ListTile(
-              leading: const Icon(Icons.inventory_2_outlined, color: Color(0xFF60A5FA)),
-              title: const Text('Inventario & Tarifas', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Productos, precios PVP / Especial Colaborador y stock', style: TextStyle(color: Colors.grey, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo)));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.people_alt_outlined, color: Color(0xFF10B981)),
-              title: const Text('Clientes & Colaboradores', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Base de datos autorrellenable y tarifas', style: TextStyle(color: Colors.grey, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => ClientesScreen(onChanged: _refrescarTodo)));
-              },
-            ),
+            const SizedBox(height: 12),
             ListTile(
               leading: const Icon(Icons.calculate_outlined, color: Colors.amberAccent),
               title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
@@ -448,11 +512,16 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
     }
 
     return Scaffold(
+      bottomNavigationBar: _barraNavegacionOperativa(
+        context: context,
+        activa: 'Inicio',
+        onRefrescar: _refrescarTodo,
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refrescarTodo,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 30),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
               Row(
                 children: [
@@ -554,15 +623,18 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
               Row(
                 children: [
                   Expanded(
-                    child: _kpiTarjeta(
-                      titulo: 'Por Cobrar',
-                      valor: '${porCobrarTotal.toStringAsFixed(2)} €',
-                      subtitulo: '$vencidasCount Vencidas (${vencidasTotal.toStringAsFixed(0)} €)',
-                      subColor: const Color(0xFFEF4444),
-                      icono: Icons.access_time_rounded,
-                      iconColor: const Color(0xFFEF4444),
-                      bordeColor: const Color(0xFFEF4444).withOpacity(0.45),
-                      showWarningIcon: true,
+                    child: GestureDetector(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CobrosScreen(onChanged: _refrescarTodo))),
+                      child: _kpiTarjeta(
+                        titulo: 'Por Cobrar',
+                        valor: '${porCobrarTotal.toStringAsFixed(2)} €',
+                        subtitulo: '$vencidasCount Vencidas (${vencidasTotal.toStringAsFixed(0)} €)',
+                        subColor: const Color(0xFFEF4444),
+                        icono: Icons.access_time_rounded,
+                        iconColor: const Color(0xFFEF4444),
+                        bordeColor: const Color(0xFFEF4444).withOpacity(0.45),
+                        showWarningIcon: true,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -638,16 +710,21 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
                           ],
                         ),
                         GestureDetector(
-                          onTap: () => mostrarDialogoVenta(context, _refrescarTodo, esCreditoDefault: true),
-                          child: const Text('+ Nuevo', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CobrosScreen(onChanged: _refrescarTodo))),
+                          child: const Text('Ver Todo', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     if (vencimientosProximos.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Text('Sin cobros pendientes. ¡Todo al día!', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF182132),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text('No hay registros para mostrar.', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                       )
                     else
                       ...vencimientosProximos.take(4).map((v) {
@@ -815,7 +892,7 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(color: const Color(0xFF121927), borderRadius: BorderRadius.circular(12)),
                   alignment: Alignment.center,
-                  child: const Text('Pulsa + arriba a la derecha para crear productos y registrar operaciones.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  child: const Text('Usa Stock en el menú inferior para crear productos y registrar operaciones.', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 )
               else
                 ...movsFiltrados.map((m) {
@@ -1158,6 +1235,14 @@ class _StockScreenState extends State<StockScreen> {
         onPressed: () => _dialogoProducto(),
         child: const Icon(Icons.add, color: Colors.white),
       ),
+      bottomNavigationBar: _barraNavegacionOperativa(
+        context: context,
+        activa: 'Stock',
+        onRefrescar: () {
+          _cargar();
+          widget.onChanged();
+        },
+      ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1242,6 +1327,225 @@ class _StockScreenState extends State<StockScreen> {
   }
 }
 
+class CobrosScreen extends StatefulWidget {
+  final VoidCallback onChanged;
+  const CobrosScreen({super.key, required this.onChanged});
+
+  @override
+  State<CobrosScreen> createState() => _CobrosScreenState();
+}
+
+class _CobrosScreenState extends State<CobrosScreen> {
+  List cobros = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    final db = await DatabaseHelper.instance.database;
+    final res = await db.query(
+      'movimientos',
+      where: "tipo = 'COBRO' OR estado_cobro = 'Pendiente'",
+      orderBy: 'id DESC',
+    );
+    if (mounted) setState(() => cobros = res);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cuentas por Cobrar'), backgroundColor: const Color(0xFF0A0F1A)),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFF2F81F7),
+        onPressed: () => mostrarDialogoVenta(
+          context,
+          () {
+            _cargar();
+            widget.onChanged();
+          },
+          esCreditoDefault: true,
+        ),
+        child: const Icon(Icons.add, color: Colors.white),
+      ),
+      bottomNavigationBar: _barraNavegacionOperativa(
+        context: context,
+        activa: 'Cobros',
+        onRefrescar: () {
+          _cargar();
+          widget.onChanged();
+        },
+      ),
+      body: cobros.isEmpty
+          ? const Center(child: Text('No hay cobros pendientes.', style: TextStyle(color: Colors.grey)))
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 80),
+              itemCount: cobros.length,
+              itemBuilder: (context, i) {
+                final c = cobros[i];
+                final pend = (c['estado_cobro'] ?? '') == 'Pendiente';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF121927),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF23304A)),
+                  ),
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${c['cliente_proveedor']} (${c['producto_nombre']} x${c['cantidad'] ?? 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    subtitle: Text('${c['fecha']} • Vence: ${c['fecha_vencimiento'] ?? c['fecha']} • ${c['metodo_pago']}', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${(c['importe'] as num).toStringAsFixed(2)} €', style: TextStyle(color: pend ? Colors.orangeAccent : const Color(0xFF10B981), fontWeight: FontWeight.bold)),
+                        if (pend)
+                          IconButton(
+                            icon: const Icon(Icons.check_circle, color: Color(0xFF10B981)),
+                            onPressed: () async {
+                              final db = await DatabaseHelper.instance.database;
+                              await db.update('movimientos', {'tipo': 'VENTA', 'estado_cobro': 'Pagado'}, where: 'id = ?', whereArgs: [c['id']]);
+                              _cargar();
+                              widget.onChanged();
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+
+class KardexScreen extends StatefulWidget {
+  final VoidCallback onChanged;
+  const KardexScreen({super.key, required this.onChanged});
+
+  @override
+  State<KardexScreen> createState() => _KardexScreenState();
+}
+
+class _KardexScreenState extends State<KardexScreen> {
+  String filtro = 'TODOS';
+  List movimientos = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    final db = await DatabaseHelper.instance.database;
+    var res = [];
+    if (filtro == 'TODOS') {
+      res = await db.query('movimientos', orderBy: 'id DESC');
+    } else if (filtro == 'VENTA') {
+      res = await db.query('movimientos', where: "tipo = 'VENTA' OR tipo = 'COBRO'", orderBy: 'id DESC');
+    } else {
+      res = await db.query('movimientos', where: 'tipo = ?', whereArgs: [filtro], orderBy: 'id DESC');
+    }
+    if (mounted) setState(() => movimientos = res);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Kardex de Movimientos'), backgroundColor: const Color(0xFF0A0F1A)),
+      bottomNavigationBar: _barraNavegacionOperativa(
+        context: context,
+        activa: 'Kardex',
+        onRefrescar: () {
+          _cargar();
+          widget.onChanged();
+        },
+      ),
+      body: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              children: ['TODOS', 'VENTA', 'COMPRA', 'COBRO'].map((f) {
+                final sel = filtro == f;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(f),
+                    selected: sel,
+                    selectedColor: const Color(0xFF2F81F7),
+                    backgroundColor: const Color(0xFF121927),
+                    labelStyle: TextStyle(color: sel ? Colors.white : Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12),
+                    onSelected: (_) {
+                      setState(() => filtro = f);
+                      _cargar();
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: movimientos.isEmpty
+                ? const Center(child: Text('Sin movimientos en este filtro.', style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
+                    itemCount: movimientos.length,
+                    itemBuilder: (context, i) {
+                      final m = movimientos[i];
+                      final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+                      final esCompra = tipo == 'COMPRA';
+                      final cant = m['cantidad'] ?? 1;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF121927),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${m['cliente_proveedor']} • ${m['producto_nombre']} (x$cant)', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                                  const SizedBox(height: 3),
+                                  Text('$tipo • ${m['tarifa']} • ${m['metodo_pago']} • ${m['fecha']}', style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${esCompra ? '-' : '+'}${(m['importe'] as num).toStringAsFixed(2)} €',
+                              style: TextStyle(color: esCompra ? const Color(0xFFEF4444) : const Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 18),
+                              onPressed: () async {
+                                final db = await DatabaseHelper.instance.database;
+                                await db.delete('movimientos', where: 'id = ?', whereArgs: [m['id']]);
+                                _cargar();
+                                widget.onChanged();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ClientesScreen extends StatefulWidget {
   final VoidCallback onChanged;
   const ClientesScreen({super.key, required this.onChanged});
@@ -1269,6 +1573,14 @@ class _ClientesScreenState extends State<ClientesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Clientes & Colaboradores'), backgroundColor: const Color(0xFF0A0F1A)),
+      bottomNavigationBar: _barraNavegacionOperativa(
+        context: context,
+        activa: 'Clientes',
+        onRefrescar: () {
+          _cargar();
+          widget.onChanged();
+        },
+      ),
       body: clientes.isEmpty
           ? const Center(child: Text('Se guardarán solos cuando registres ventas.', style: TextStyle(color: Colors.grey)))
           : ListView.builder(
@@ -1308,7 +1620,7 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
 
   if (productos.isEmpty) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea un producto en Inventario & Tarifas (menú +).')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea un producto en Stock (menú inferior).')));
     }
     return;
   }
@@ -1521,7 +1833,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
 
   if (productos.isEmpty) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea el producto en Inventario & Tarifas (menú +).')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea el producto en Stock (menú inferior).')));
     }
     return;
   }
