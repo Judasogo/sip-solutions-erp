@@ -20,19 +20,19 @@ class ERPJuanApp extends StatelessWidget {
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0B101B),
+        scaffoldBackgroundColor: const Color(0xFF0A0F1A),
         primaryColor: const Color(0xFF2F81F7),
-        cardColor: const Color(0xFF131B2E),
-        dialogBackgroundColor: const Color(0xFF131B2E),
+        cardColor: const Color(0xFF121927),
+        dialogBackgroundColor: const Color(0xFF121927),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFF2F81F7),
           secondary: Color(0xFF10B981),
-          surface: Color(0xFF131B2E),
+          surface: Color(0xFF121927),
           error: Color(0xFFEF4444),
         ),
         useMaterial3: true,
       ),
-      home: const DashboardOverviewScreen(),
+      home: const DashboardPrincipal(),
     );
   }
 }
@@ -45,7 +45,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('erp_juan_v2.db');
+    _database = await _initDB('erp_juan_v3.db');
     return _database!;
   }
 
@@ -54,9 +54,8 @@ class DatabaseHelper {
     final path = p.join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 3,
+      version: 1,
       onCreate: _createDB,
-      onUpgrade: _upgradeDB,
     );
   }
 
@@ -95,17 +94,10 @@ class DatabaseHelper {
         importe REAL NOT NULL DEFAULT 0.0,
         metodo_pago TEXT DEFAULT 'Contado / Efectivo',
         estado_cobro TEXT DEFAULT 'Pagado',
-        fecha TEXT NOT NULL
+        fecha TEXT NOT NULL,
+        fecha_vencimiento TEXT NOT NULL
       )
     ''');
-  }
-
-  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    await _createDB(db, newVersion);
-    try { await db.execute("ALTER TABLE productos ADD COLUMN proveedor TEXT DEFAULT ''"); } catch (_) {}
-    try { await db.execute("ALTER TABLE movimientos ADD COLUMN cantidad INTEGER NOT NULL DEFAULT 1"); } catch (_) {}
-    try { await db.execute("ALTER TABLE movimientos ADD COLUMN precio_unitario REAL NOT NULL DEFAULT 0.0"); } catch (_) {}
-    try { await db.execute("ALTER TABLE movimientos ADD COLUMN estado_cobro TEXT DEFAULT 'Pagado'"); } catch (_) {}
   }
 
   Future<void> asegurarCliente(String nombre, String tipoTarifa) async {
@@ -127,141 +119,224 @@ class DatabaseHelper {
   }
 }
 
-class DashboardOverviewScreen extends StatefulWidget {
-  const DashboardOverviewScreen({super.key});
+class DashboardPrincipal extends StatefulWidget {
+  const DashboardPrincipal({super.key});
 
   @override
-  State<DashboardOverviewScreen> createState() => _DashboardOverviewScreenState();
+  State<DashboardPrincipal> createState() => _DashboardPrincipalState();
 }
 
-class _DashboardOverviewScreenState extends State<DashboardOverviewScreen> {
-  double ventasTotales = 0.0;
-  double beneficioNeto = 0.0;
-  double porCobrar = 0.0;
-  double comprasCosto = 0.0;
+class _DashboardPrincipalState extends State<DashboardPrincipal> {
+  double porCobrarTotal = 0.0;
+  double vencidasTotal = 0.0;
+  int vencidasCount = 0;
+  double ingresosTotales = 0.0;
+  double ingresosMesActual = 0.0;
+  double valorStock = 0.0;
+  int stockBajoCount = 0;
 
-  String filtroActivo = 'TODOS';
-  List movimientos = [];
+  List vencimientosProximos = [];
+  List movimientosTodos = [];
+  List puntosGrafica = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+  List etiquetasMeses = ['Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov'];
 
-  final costoSimCtrl = TextEditingController(text: '37');
-  final margenSimCtrl = TextEditingController(text: '143.24');
-  double precioRecomendado = 90.00;
-  double beneficioUnitario = 53.00;
+  String filtroKardex = 'TODOS';
 
   @override
   void initState() {
     super.initState();
-    _recalcularSimulador();
-    _cargarTodo();
+    _refrescarTodo();
   }
 
-  void _recalcularSimulador() {
-    final costo = double.tryParse(costoSimCtrl.text.replaceAll(',', '.')) ?? 0.0;
-    final margen = double.tryParse(margenSimCtrl.text.replaceAll(',', '.')) ?? 0.0;
-    setState(() {
-      precioRecomendado = costo * (1 + (margen / 100));
-      beneficioUnitario = precioRecomendado - costo;
-    });
-  }
-
-  Future<void> _cargarTodo() async {
+  Future<void> _refrescarTodo() async {
     final db = await DatabaseHelper.instance.database;
-    final todosMovs = await db.query('movimientos', orderBy: 'id DESC');
+    final movs = await db.query('movimientos', orderBy: 'id DESC');
+    final prods = await db.query('productos', orderBy: 'nombre ASC');
 
-    double v = 0.0;
-    double c = 0.0;
-    double pCobro = 0.0;
+    double pCobrar = 0.0;
+    double vTotal = 0.0;
+    int vCount = 0;
+    double ingTotal = 0.0;
+    double ingMes = 0.0;
 
-    for (var m in todosMovs) {
+    final ahora = DateTime.now();
+    final hoySoloFecha = DateTime(ahora.year, ahora.month, ahora.day);
+    final prefijoMesActual = '${ahora.year}-${ahora.month.toString().padLeft(2, '0')}';
+
+    List listaVencimientos = [];
+
+    // Preparar últimos 6 meses para gráfica
+    List mesesKeys = [];
+    List mesesLabels = [];
+    const nombresMes = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    for (int i = 5; i >= 0; i--) {
+      final d = DateTime(ahora.year, ahora.month - i, 1);
+      mesesKeys.add('${d.year}-${d.month.toString().padLeft(2, '0')}');
+      mesesLabels.add(nombresMes[d.month - 1]);
+    }
+    List sumasMes = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+    for (var m in movs) {
       final tipo = (m['tipo'] ?? '').toString().toUpperCase();
       final imp = (m['importe'] as num?)?.toDouble() ?? 0.0;
       final estado = (m['estado_cobro'] ?? 'Pagado').toString();
+      final fechaStr = (m['fecha'] ?? '').toString();
+      final vencStr = (m['fecha_vencimiento'] ?? fechaStr).toString();
 
-      if (tipo == 'VENTA') {
-        v += imp;
-        if (estado == 'Pendiente') pCobro += imp;
-      } else if (tipo == 'COMPRA') {
-        c += imp;
-      } else if (tipo == 'COBRO') {
+      if (tipo == 'VENTA' || tipo == 'COBRO') {
         if (estado == 'Pendiente') {
-          pCobro += imp;
+          pCobrar += imp;
+          final fVenc = DateTime.tryParse(vencStr) ?? hoySoloFecha;
+          final diffDias = hoySoloFecha.difference(DateTime(fVenc.year, fVenc.month, fVenc.day)).inDays;
+          if (diffDias > 0) {
+            vCount++;
+            vTotal += imp;
+          }
+          final itemCopia = Map.from(m);
+          itemCopia['dias_retraso'] = diffDias;
+          listaVencimientos.add(itemCopia);
         } else {
-          v += imp;
+          ingTotal += imp;
+          if (fechaStr.startsWith(prefijoMesActual)) {
+            ingMes += imp;
+          }
+          for (int idx = 0; idx < 6; idx++) {
+            if (fechaStr.startsWith(mesesKeys[idx])) {
+              sumasMes[idx] = (sumasMes[idx] as double) + imp;
+            }
+          }
         }
       }
     }
 
-    List filtrados = [];
-    if (filtroActivo == 'TODOS') {
-      filtrados = todosMovs;
-    } else if (filtroActivo == 'VENTA') {
-      filtrados = todosMovs.where((m) {
-        final t = (m['tipo'] ?? '').toString().toUpperCase();
-        return t == 'VENTA' || t == 'COBRO';
-      }).toList();
-    } else if (filtroActivo == 'COMPRA') {
-      filtrados = todosMovs.where((m) => (m['tipo'] ?? '').toString().toUpperCase() == 'COMPRA').toList();
-    } else if (filtroActivo == 'COBRO') {
-      filtrados = todosMovs.where((m) {
-        final t = (m['tipo'] ?? '').toString().toUpperCase();
-        final e = (m['estado_cobro'] ?? '').toString();
-        return t == 'COBRO' || e == 'Pendiente';
-      }).toList();
-    } else if (filtroActivo == 'PROVEEDOR') {
-      filtrados = todosMovs.where((m) => (m['tipo'] ?? '').toString().toUpperCase() == 'COMPRA').toList();
+    // Ordenar vencimientos: primero más vencidos
+    listaVencimientos.sort((a, b) => (b['dias_retraso'] as int).compareTo(a['dias_retraso'] as int));
+
+    // Calcular valoración de stock y alertas de stock bajo
+    double vStock = 0.0;
+    int sBajo = 0;
+    for (var pr in prods) {
+      final st = (pr['stock'] as int?) ?? 0;
+      final costo = (pr['costo_compra'] as num?)?.toDouble() ?? 0.0;
+      vStock += st * costo;
+      if (st <= 3) sBajo++;
     }
 
     if (mounted) {
       setState(() {
-        ventasTotales = v;
-        comprasCosto = c;
-        porCobrar = pCobro;
-        beneficioNeto = v - c;
-        movimientos = filtrados;
+        porCobrarTotal = pCobrar;
+        vencidasTotal = vTotal;
+        vencidasCount = vCount;
+        ingresosTotales = ingTotal;
+        ingresosMesActual = ingMes;
+        valorStock = vStock;
+        stockBajoCount = sBajo;
+        vencimientosProximos = listaVencimientos;
+        movimientosTodos = movs;
+        puntosGrafica = sumasMes;
+        etiquetasMeses = mesesLabels;
       });
     }
   }
 
-  void _abrirMenuModulos() {
+  Future<void> _exportarResumen() async {
+    final buffer = StringBuffer();
+    buffer.writeln('=== REPORTE ERP JUAN ===');
+    buffer.writeln('Ingresos Totales: ${ingresosTotales.toStringAsFixed(2)} €');
+    buffer.writeln('Por Cobrar: ${porCobrarTotal.toStringAsFixed(2)} € ($vencidasCount vencidas)');
+    buffer.writeln('Valor Inventario: ${valorStock.toStringAsFixed(2)} €');
+    buffer.writeln('Productos Stock Bajo: $stockBajoCount');
+    buffer.writeln('\n--- ÚLTIMOS MOVIMIENTOS ---');
+    for (var m in movimientosTodos.take(15)) {
+      buffer.writeln('${m['fecha']} | ${m['tipo']} | ${m['cliente_proveedor']} | ${m['producto_nombre']} x${m['cantidad'] ?? 1} | ${m['importe']} € (${m['estado_cobro']})');
+    }
+    await Clipboard.setData(ClipboardData(text: buffer.toString()));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Color(0xFF10B981),
+          content: Text('Reporte copiado al portapapeles listo para pegar en WhatsApp o Notas.'),
+        ),
+      );
+    }
+  }
+
+  void _abrirMenuRapido() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF131B2E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: const Color(0xFF121927),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Módulos del Sistema', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-            const SizedBox(height: 16),
+            const Text('Acciones & Módulos ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 19),
+                    label: const Text('Nueva Venta', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      mostrarDialogoVenta(context, _refrescarTodo);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2F81F7),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.inventory_rounded, size: 19),
+                    label: const Text('Nueva Compra', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      mostrarDialogoCompra(context, _refrescarTodo);
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
             ListTile(
-              leading: const Icon(Icons.inventory_2_rounded, color: Color(0xFF2F81F7)),
+              leading: const Icon(Icons.inventory_2_outlined, color: Color(0xFF60A5FA)),
               title: const Text('Inventario & Stock', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Gestionar productos, precios PVP/Colaborador y proveedores', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              subtitle: const Text('Productos, precios PVP / Colaborador y alertas', style: TextStyle(color: Colors.grey, fontSize: 12)),
               onTap: () {
                 Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _cargarTodo)));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo)));
               },
             ),
             ListTile(
-              leading: const Icon(Icons.people_alt_rounded, color: Color(0xFF10B981)),
+              leading: const Icon(Icons.people_alt_outlined, color: Color(0xFF10B981)),
               title: const Text('Clientes & Colaboradores', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Base de datos de clientes y tarifas especiales', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              subtitle: const Text('Base de datos autorrellenable y tarifas', style: TextStyle(color: Colors.grey, fontSize: 12)),
               onTap: () {
                 Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => ClientesScreen(onChanged: _cargarTodo)));
+                Navigator.push(context, MaterialPageRoute(builder: (_) => ClientesScreen(onChanged: _refrescarTodo)));
               },
             ),
             ListTile(
-              leading: const Icon(Icons.pending_actions_rounded, color: Colors.orangeAccent),
-              title: const Text('Cuentas por Cobrar', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Ver pagos pendientes y liquidar cobros', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              leading: const Icon(Icons.calculate_outlined, color: Colors.amberAccent),
+              title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Simula precios y beneficios unitarios', style: TextStyle(color: Colors.grey, fontSize: 12)),
               onTap: () {
                 Navigator.pop(ctx);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => CobrosScreen(onChanged: _cargarTodo)));
+                _mostrarCalculadoraDialog();
               },
             ),
           ],
@@ -270,42 +345,79 @@ class _DashboardOverviewScreenState extends State<DashboardOverviewScreen> {
     );
   }
 
+  void _mostrarCalculadoraDialog() {
+    final costoCtrl = TextEditingController(text: '37');
+    final margenCtrl = TextEditingController(text: '50');
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateDlg) {
+          final costo = double.tryParse(costoCtrl.text.replaceAll(',', '.')) ?? 0.0;
+          final margen = double.tryParse(margenCtrl.text.replaceAll(',', '.')) ?? 0.0;
+          final pvp = costo * (1 + margen / 100);
+          final ben = pvp - costo;
+          return AlertDialog(
+            title: const Text('Simulador de Precios'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: costoCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Costo Unitario (€)'),
+                  onChanged: (_) => setStateDlg(() {}),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: margenCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Margen Deseado (%)'),
+                  onChanged: (_) => setStateDlg(() {}),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFF1A2336), borderRadius: BorderRadius.circular(10)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('PVP: ${pvp.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('Beneficio: +${ben.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filtros = ['TODOS', 'VENTA', 'COMPRA', 'COBRO', 'PROVEEDOR'];
+    List movsFiltrados = [];
+    if (filtroKardex == 'TODOS') {
+      movsFiltrados = movimientosTodos;
+    } else if (filtroKardex == 'VENTA') {
+      movsFiltrados = movimientosTodos.where((m) {
+        final t = (m['tipo'] ?? '').toString().toUpperCase();
+        return t == 'VENTA' || t == 'COBRO';
+      }).toList();
+    } else {
+      movsFiltrados = movimientosTodos.where((m) => (m['tipo'] ?? '').toString().toUpperCase() == filtroKardex).toList();
+    }
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0B101B),
-        elevation: 0,
-        title: const Text('Dashboard Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF2F81F7)),
-            onPressed: _cargarTodo,
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF2F81F7),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        onPressed: _abrirMenuModulos,
-        child: const Icon(Icons.menu_rounded, color: Colors.white, size: 28),
-      ),
-      body: RefreshIndicator(
-        onRefresh: _cargarTodo,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-          children: [
-            // Cabecera ERP Juan
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF131B2E),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: Row(
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _refrescarTodo,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 30),
+            children: [
+              // 1. Cabecera Principal estilo Dashboard
+              Row(
                 children: [
                   Container(
                     width: 44,
@@ -315,14 +427,28 @@ class _DashboardOverviewScreenState extends State<DashboardOverviewScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     alignment: Alignment.center,
-                    child: const Text('J', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+                    child: const Text('J', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
+                        Row(
+                          children: [
+                            const Text('ERP Juan', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1B263B),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFF2F81F7).withOpacity(0.5)),
+                              ),
+                              child: const Text('DARK UI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF60A5FA))),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 3),
                         Row(
                           children: [
@@ -334,352 +460,400 @@ class _DashboardOverviewScreenState extends State<DashboardOverviewScreen> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1D2842),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF2F81F7).withOpacity(0.4)),
+                  IconButton(
+                    icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+                    onPressed: _refrescarTodo,
+                  ),
+                  GestureDetector(
+                    onTap: _abrirMenuRapido,
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2F81F7),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.add, color: Colors.white, size: 24),
                     ),
-                    child: const Text('Por Juan', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
-            ),
 
-            const SizedBox(height: 14),
+              const SizedBox(height: 14),
 
-            // Botones + Nueva Venta y + Nueva Compra lado a lado
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              // 2. Barra de Alerta de Deuda y Exportar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A151D),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.35)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$vencidasCount Deuda(s) Vencida(s) · Cobrar ${porCobrarTotal.toStringAsFixed(0)} €',
+                        style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                      ),
                     ),
-                    icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-                    label: const Text('+ Nueva Venta', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    onPressed: () => mostrarDialogoVenta(context, _cargarTodo),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2F81F7),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    GestureDetector(
+                      onTap: _exportarResumen,
+                      child: const Row(
+                        children: [
+                          Icon(Icons.download_rounded, color: Color(0xFF60A5FA), size: 16),
+                          SizedBox(width: 4),
+                          Text('Exportar', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
-                    icon: const Icon(Icons.shopping_cart_outlined, size: 20),
-                    label: const Text('+ Nueva Compra', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    onPressed: () => mostrarDialogoCompra(context, _cargarTodo),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 14),
-
-            // Grid 2x2 de KPIs
-            Row(
-              children: [
-                Expanded(
-                  child: _buildKpiBox(
-                    titulo: 'VENTAS TOTALES',
-                    valor: '${ventasTotales.toStringAsFixed(2)} €',
-                    subtitulo: 'Ingresos registrados',
-                    subColor: const Color(0xFF60A5FA),
-                    icono: Icons.trending_up_rounded,
-                    iconColor: const Color(0xFF60A5FA),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildKpiBox(
-                    titulo: 'BENEFICIO NETO',
-                    valor: '${beneficioNeto.toStringAsFixed(2)} €',
-                    subtitulo: 'Ventas - Compras',
-                    subColor: const Color(0xFF10B981),
-                    icono: Icons.account_balance_wallet_outlined,
-                    iconColor: const Color(0xFF10B981),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CobrosScreen(onChanged: _cargarTodo))),
-                    child: _buildKpiBox(
-                      titulo: 'POR COBRAR',
-                      valor: '${porCobrar.toStringAsFixed(2)} €',
-                      subtitulo: 'Cuentas pendientes',
-                      subColor: const Color(0xFFEF4444),
-                      icono: Icons.assignment_late_outlined,
-                      iconColor: const Color(0xFFEF4444),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _cargarTodo))),
-                    child: _buildKpiBox(
-                      titulo: 'COMPRAS / COSTO',
-                      valor: '${comprasCosto.toStringAsFixed(2)} €',
-                      subtitulo: 'Inversión stock',
-                      subColor: const Color(0xFFF59E0B),
-                      icono: Icons.inventory_2_outlined,
-                      iconColor: const Color(0xFFF59E0B),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Calculadora & Simulador en Vivo
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF131B2E),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white10),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+
+              const SizedBox(height: 14),
+
+              // 3. Grid 2x2 de KPIs Principales
+              Row(
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.calculate_outlined, color: Color(0xFF60A5FA), size: 20),
-                      SizedBox(width: 8),
-                      Text('Calculadora & Simulador en Vivo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('Simula precios para Cliente Final o Colaborador.', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: costoSimCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                          decoration: InputDecoration(
-                            labelText: 'Costo Unitario (€)',
-                            filled: true,
-                            fillColor: const Color(0xFF1A243B),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                          ),
-                          onChanged: (_) => _recalcularSimulador(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: margenSimCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                          decoration: InputDecoration(
-                            labelText: 'Margen Deseado (%)',
-                            filled: true,
-                            fillColor: const Color(0xFF1A243B),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                          ),
-                          onChanged: (_) => _recalcularSimulador(),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A243B),
-                      borderRadius: BorderRadius.circular(12),
+                  Expanded(
+                    child: _kpiTarjeta(
+                      titulo: 'Por Cobrar',
+                      valor: '${porCobrarTotal.toStringAsFixed(2)} €',
+                      subtitulo: '$vencidasCount Vencidas (${vencidasTotal.toStringAsFixed(0)} €)',
+                      subColor: const Color(0xFFEF4444),
+                      icono: Icons.access_time_rounded,
+                      iconColor: const Color(0xFFEF4444),
+                      bordeColor: const Color(0xFFEF4444).withOpacity(0.45),
+                      showWarningIcon: true,
                     ),
-                    child: Row(
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _kpiTarjeta(
+                      titulo: 'Ingresos',
+                      valor: '${ingresosTotales.toStringAsFixed(2)} €',
+                      subtitulo: '+${ingresosMesActual.toStringAsFixed(2)} € este mes',
+                      subColor: const Color(0xFF10B981),
+                      icono: Icons.euro_rounded,
+                      iconColor: const Color(0xFF60A5FA),
+                      bordeColor: Colors.white10,
+                      showTrendIcon: true,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo))),
+                      child: _kpiTarjeta(
+                        titulo: 'Valor Stock',
+                        valor: '${valorStock.toStringAsFixed(2)} €',
+                        subtitulo: 'En inventario activo',
+                        subColor: Colors.grey[400]!,
+                        icono: Icons.view_in_ar_rounded,
+                        iconColor: const Color(0xFF60A5FA),
+                        bordeColor: Colors.white10,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo))),
+                      child: _kpiTarjeta(
+                        titulo: 'Stock Bajo',
+                        valor: '$stockBajoCount Prod.',
+                        subtitulo: 'Requieren reposición',
+                        subColor: const Color(0xFFF59E0B),
+                        icono: Icons.error_outline_rounded,
+                        iconColor: const Color(0xFFF59E0B),
+                        bordeColor: Colors.white10,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // 4. Tarjeta Próximos Vencimientos de Cobro
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF121927),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.notifications_none_rounded, color: Color(0xFFF59E0B), size: 20),
+                            SizedBox(width: 8),
+                            Text('Próximos Vencimientos de Cobro', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B))),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () => mostrarDialogoVenta(context, _refrescarTodo, esCreditoDefault: true),
+                          child: const Text('+ Nuevo', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (vencimientosProximos.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Text('Sin cobros pendientes. ¡Todo al día!', style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                      )
+                    else
+                      ...vencimientosProximos.take(4).map((v) {
+                        final dias = (v['dias_retraso'] as int?) ?? 0;
+                        final esVencida = dias > 0;
+                        final esHoy = dias == 0;
+                        final textoBadge = esVencida
+                            ? 'Vencida por $dias días'
+                            : (esHoy ? '¡Vence Hoy!' : 'Vence en ${dias.abs()} días');
+                        final colorBadge = esVencida
+                            ? const Color(0xFFEF4444)
+                            : (esHoy ? const Color(0xFFF59E0B) : const Color(0xFF60A5FA));
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF182132),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children: [
+                                    Text(
+                                      '${v['cliente_proveedor']} (${v['producto_nombre']})',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: colorBadge.withOpacity(0.18),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(textoBadge, style: TextStyle(fontSize: 11, color: colorBadge, fontWeight: FontWeight.w600)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    '${(v['importe'] as num).toStringAsFixed(2)} €',
+                                    style: const TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      final db = await DatabaseHelper.instance.database;
+                                      await db.update(
+                                        'movimientos',
+                                        {'tipo': 'VENTA', 'estado_cobro': 'Pagado'},
+                                        where: 'id = ?',
+                                        whereArgs: [v['id']],
+                                      );
+                                      _refrescarTodo();
+                                    },
+                                    child: const Text('Cobrar ✓', style: TextStyle(color: Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // 5. Gráfica Rendimiento de Ventas
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF121927),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('PRECIO VENTA RECOMENDADO', style: TextStyle(fontSize: 10, color: Colors.grey[400], fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 4),
-                            Text('${precioRecomendado.toStringAsFixed(2)} €', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF60A5FA))),
+                            const Text('Rendimiento de Ventas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                            const SizedBox(height: 2),
+                            Text('Ingresos vs Cuentas cobradas', style: TextStyle(fontSize: 12, color: Colors.grey[400])),
                           ],
                         ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('BENEFICIO UNITARIO', style: TextStyle(fontSize: 10, color: Colors.grey[400], fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 4),
-                            Text('${beneficioUnitario.toStringAsFixed(2)} €', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
-                          ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1B263B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF2F81F7).withOpacity(0.5)),
+                          ),
+                          child: const Text('EUR (€)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF60A5FA))),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Módulos & Movimientos
-            const Text('Módulos & Movimientos', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white)),
-            const SizedBox(height: 12),
-
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: filtros.map((f) {
-                  final sel = filtroActivo == f;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      avatar: sel ? const Icon(Icons.check, size: 16, color: Colors.white) : null,
-                      label: Text(f),
-                      selected: sel,
-                      showCheckmark: false,
-                      selectedColor: const Color(0xFF2F81F7),
-                      backgroundColor: const Color(0xFF131B2E),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: sel ? const Color(0xFF2F81F7) : Colors.white12),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      height: 150,
+                      width: double.infinity,
+                      child: CustomPaint(
+                        painter: LineChartPainter(valores: puntosGrafica, etiquetas: etiquetasMeses),
                       ),
-                      labelStyle: TextStyle(
-                        color: sel ? Colors.white : Colors.grey[300],
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                      onSelected: (_) {
-                        setState(() => filtroActivo = f);
-                        _cargarTodo();
-                      },
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            if (movimientos.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF131B2E),
-                  borderRadius: BorderRadius.circular(14),
+                  ],
                 ),
-                alignment: Alignment.center,
-                child: const Text('No hay movimientos registrados en este filtro.', style: TextStyle(color: Colors.grey)),
-              )
-            else
-              ...movimientos.map((m) {
-                final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-                final esCompra = tipo == 'COMPRA';
-                final esPendiente = (m['estado_cobro'] ?? '') == 'Pendiente';
-                final cant = m['cantidad'] ?? 1;
+              ),
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF131B2E),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
+              const SizedBox(height: 18),
+
+              // 6. Historial / Kardex Integrado con Filtros
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Movimientos & Kardex', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Row(
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${m['cliente_proveedor']} (${m['producto_nombre']} x$cant)',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '$tipo • ${m['tarifa']} (${m['metodo_pago']}) • ${m['fecha']}',
-                              style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                            ),
-                          ],
-                        ),
+                      TextButton.icon(
+                        onPressed: () => mostrarDialogoVenta(context, _refrescarTodo),
+                        icon: const Icon(Icons.add, size: 16, color: Color(0xFF10B981)),
+                        label: const Text('Venta', style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '${esCompra ? '-' : '+'}${(m['importe'] as num).toStringAsFixed(2)} €',
-                            style: TextStyle(
-                              color: esCompra
-                                  ? const Color(0xFFEF4444)
-                                  : (esPendiente ? Colors.orangeAccent : const Color(0xFF10B981)),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          if (esPendiente)
-                            GestureDetector(
-                              onTap: () async {
-                                final db = await DatabaseHelper.instance.database;
-                                await db.update(
-                                  'movimientos',
-                                  {'tipo': 'VENTA', 'estado_cobro': 'Pagado'},
-                                  where: 'id = ?',
-                                  whereArgs: [m['id']],
-                                );
-                                _cargarTodo();
-                              },
-                              child: const Padding(
-                                padding: EdgeInsets.only(top: 4),
-                                child: Text('Marcar cobrado', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
-                        onPressed: () async {
-                          final db = await DatabaseHelper.instance.database;
-                          await db.delete('movimientos', where: 'id = ?', whereArgs: [m['id']]);
-                          _cargarTodo();
-                        },
+                      TextButton.icon(
+                        onPressed: () => mostrarDialogoCompra(context, _refrescarTodo),
+                        icon: const Icon(Icons.add, size: 16, color: Color(0xFF60A5FA)),
+                        label: const Text('Compra', style: TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
-                );
-              }),
-          ],
+                ],
+              ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: ['TODOS', 'VENTA', 'COMPRA', 'COBRO'].map((f) {
+                    final sel = filtroKardex == f;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(f),
+                        selected: sel,
+                        selectedColor: const Color(0xFF2F81F7),
+                        backgroundColor: const Color(0xFF121927),
+                        labelStyle: TextStyle(color: sel ? Colors.white : Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12),
+                        onSelected: (_) => setState(() => filtroKardex = f),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (movsFiltrados.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(color: const Color(0xFF121927), borderRadius: BorderRadius.circular(12)),
+                  alignment: Alignment.center,
+                  child: const Text('Pulsa + arriba a la derecha para crear productos y registrar operaciones.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                )
+              else
+                ...movsFiltrados.map((m) {
+                  final tipo = (m['tipo'] ?? '').toString().toUpperCase();
+                  final esCompra = tipo == 'COMPRA';
+                  final cant = m['cantidad'] ?? 1;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF121927),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${m['cliente_proveedor']} • ${m['producto_nombre']} (x$cant)', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                              const SizedBox(height: 3),
+                              Text('$tipo • ${m['tarifa']} • ${m['metodo_pago']} • ${m['fecha']}', style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '${esCompra ? '-' : '+'}${(m['importe'] as num).toStringAsFixed(2)} €',
+                          style: TextStyle(
+                            color: esCompra ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 18),
+                          onPressed: () async {
+                            final db = await DatabaseHelper.instance.database;
+                            await db.delete('movimientos', where: 'id = ?', whereArgs: [m['id']]);
+                            _refrescarTodo();
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildKpiBox({
+  Widget _kpiTarjeta({
     required String titulo,
     required String valor,
     required String subtitulo,
     required Color subColor,
     required IconData icono,
     required Color iconColor,
+    required Color bordeColor,
+    bool showWarningIcon = false,
+    bool showTrendIcon = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF131B2E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        color: const Color(0xFF121927),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: bordeColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -687,18 +861,129 @@ class _DashboardOverviewScreenState extends State<DashboardOverviewScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(titulo, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[400])),
+              Text(titulo, style: TextStyle(fontSize: 12, color: Colors.grey[400], fontWeight: FontWeight.w500)),
               Icon(icono, size: 18, color: iconColor),
             ],
           ),
           const SizedBox(height: 10),
           Text(valor, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 6),
-          Text(subtitulo, style: TextStyle(fontSize: 12, color: subColor, fontWeight: FontWeight.w500)),
+          Row(
+            children: [
+              if (showWarningIcon) ...[
+                Icon(Icons.warning_amber_rounded, size: 13, color: subColor),
+                const SizedBox(width: 4),
+              ],
+              if (showTrendIcon) ...[
+                Icon(Icons.trending_up_rounded, size: 14, color: subColor),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: Text(
+                  subtitulo,
+                  style: TextStyle(fontSize: 11, color: subColor, fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
+}
+
+class LineChartPainter extends CustomPainter {
+  final List valores;
+  final List etiquetas;
+
+  LineChartPainter({required this.valores, required this.etiquetas});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final leftPad = 42.0;
+    final bottomPad = 24.0;
+    final chartW = size.width - leftPad - 10;
+    final chartH = size.height - bottomPad - 10;
+
+    double maxVal = 100.0;
+    for (var v in valores) {
+      if ((v as double) > maxVal) maxVal = v;
+    }
+
+    final gridPaint = Paint()
+      ..color = Colors.white10
+      ..strokeWidth = 1;
+
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+
+    for (int i = 0; i <= 4; i++) {
+      final y = 10 + (chartH / 4) * i;
+      canvas.drawLine(Offset(leftPad, y), Offset(size.width - 10, y), gridPaint);
+      final labelVal = (maxVal * (1 - i / 4)).toInt();
+      textPainter.text = TextSpan(text: '$labelVal', style: const TextStyle(color: Colors.grey, fontSize: 10));
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(0, y - 6));
+    }
+
+    final stepX = chartW / (valores.length - 1);
+    final linePath = Path();
+    final fillPath = Path();
+    List puntos = [];
+
+    for (int i = 0; i < valores.length; i++) {
+      final val = (valores[i] as double);
+      final x = leftPad + stepX * i;
+      final y = 10 + chartH - ((val / maxVal) * chartH);
+      puntos.add(Offset(x, y));
+
+      if (i == 0) {
+        linePath.moveTo(x, y);
+        fillPath.moveTo(x, 10 + chartH);
+        fillPath.lineTo(x, y);
+      } else {
+        linePath.lineTo(x, y);
+        fillPath.lineTo(x, y);
+      }
+
+      textPainter.text = TextSpan(text: etiquetas[i].toString(), style: const TextStyle(color: Colors.grey, fontSize: 10));
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(x - 10, 10 + chartH + 6));
+    }
+
+    fillPath.lineTo(leftPad + chartW, 10 + chartH);
+    fillPath.close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [const Color(0xFF2F81F7).withOpacity(0.32), const Color(0xFF2F81F7).withOpacity(0.0)],
+      ).createShader(Rect.fromLTWH(leftPad, 10, chartW, chartH));
+
+    canvas.drawPath(fillPath, fillPaint);
+
+    final linePaint = Paint()
+      ..color = const Color(0xFF2F81F7)
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawPath(linePath, linePaint);
+
+    final dotFill = Paint()..color = const Color(0xFF121927);
+    final dotStroke = Paint()
+      ..color = const Color(0xFF60A5FA)
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke;
+
+    for (var pt in puntos) {
+      canvas.drawCircle(pt as Offset, 4.5, dotFill);
+      canvas.drawCircle(pt, 4.5, dotStroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 class StockScreen extends StatefulWidget {
@@ -742,13 +1027,13 @@ class _StockScreenState extends State<StockScreen> {
             children: [
               TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre del Producto')),
               const SizedBox(height: 8),
-              TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor')),
+              TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor habitual')),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(child: TextField(controller: stockCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock Actual'))),
                   const SizedBox(width: 10),
-                  Expanded(child: TextField(controller: costoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Costo Compra (€)'))),
+                  Expanded(child: TextField(controller: costoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Costo (€)'))),
                 ],
               ),
               const SizedBox(height: 8),
@@ -796,27 +1081,31 @@ class _StockScreenState extends State<StockScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Inventario & Stock'), backgroundColor: const Color(0xFF0B101B)),
+      appBar: AppBar(title: const Text('Inventario & Stock'), backgroundColor: const Color(0xFF0A0F1A)),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF2F81F7),
         onPressed: () => _dialogoProducto(),
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: productos.isEmpty
-          ? const Center(child: Text('No hay productos registrados.', style: TextStyle(color: Colors.grey)))
+          ? const Center(child: Text('Pulsa + para añadir tus productos al inventario.', style: TextStyle(color: Colors.grey)))
           : ListView.builder(
               padding: const EdgeInsets.all(14),
               itemCount: productos.length,
               itemBuilder: (context, i) {
                 final pr = productos[i];
+                final st = (pr['stock'] as int?) ?? 0;
                 return Card(
-                  color: const Color(0xFF131B2E),
+                  color: const Color(0xFF121927),
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     onTap: () => _dialogoProducto(pr),
                     title: Text(pr['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    subtitle: Text('PVP: ${pr['precio_pvp']}€ | Colab: ${pr['precio_colaborador']}€ | Prov: ${pr['proveedor']}'),
-                    trailing: Text('${pr['stock']} uds', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+                    subtitle: Text('Costo: ${pr['costo_compra']}€ | PVP: ${pr['precio_pvp']}€ | Colab: ${pr['precio_colaborador']}€'),
+                    trailing: Text(
+                      '$st uds',
+                      style: TextStyle(color: st <= 3 ? const Color(0xFFF59E0B) : const Color(0xFF10B981), fontWeight: FontWeight.bold),
+                    ),
                   ),
                 );
               },
@@ -848,79 +1137,23 @@ class _ClientesScreenState extends State<ClientesScreen> {
     if (mounted) setState(() => clientes = res);
   }
 
-  void _nuevoCliente() {
-    final nombreCtrl = TextEditingController();
-    final telCtrl = TextEditingController();
-    String tipo = 'Cliente Final';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setStateDlg) => AlertDialog(
-          title: const Text('Nuevo Cliente / Colaborador'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: tipo,
-                decoration: const InputDecoration(labelText: 'Tipo'),
-                items: const [
-                  DropdownMenuItem(value: 'Cliente Final', child: Text('Cliente Final (PVP)')),
-                  DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador')),
-                ],
-                onChanged: (v) => setStateDlg(() => tipo = v!),
-              ),
-              const SizedBox(height: 10),
-              TextField(controller: telCtrl, decoration: const InputDecoration(labelText: 'Teléfono (opcional)')),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-            ElevatedButton(
-              onPressed: () async {
-                if (nombreCtrl.text.trim().isEmpty) return;
-                final db = await DatabaseHelper.instance.database;
-                await db.insert('clientes', {
-                  'nombre': nombreCtrl.text.trim(),
-                  'tipo': tipo,
-                  'telefono': telCtrl.text.trim(),
-                }, conflictAlgorithm: ConflictAlgorithm.replace);
-                if (ctx.mounted) Navigator.pop(ctx);
-                _cargar();
-                widget.onChanged();
-              },
-              child: const Text('Guardar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Clientes & Colaboradores'), backgroundColor: const Color(0xFF0B101B)),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF2F81F7),
-        onPressed: _nuevoCliente,
-        child: const Icon(Icons.person_add, color: Colors.white),
-      ),
+      appBar: AppBar(title: const Text('Clientes & Colaboradores'), backgroundColor: const Color(0xFF0A0F1A)),
       body: clientes.isEmpty
-          ? const Center(child: Text('Aún no hay clientes guardados.', style: TextStyle(color: Colors.grey)))
+          ? const Center(child: Text('Se guardarán solos cuando registres ventas.', style: TextStyle(color: Colors.grey)))
           : ListView.builder(
               padding: const EdgeInsets.all(14),
               itemCount: clientes.length,
               itemBuilder: (context, i) {
                 final c = clientes[i];
                 return Card(
-                  color: const Color(0xFF131B2E),
+                  color: const Color(0xFF121927),
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     title: Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    subtitle: Text('${c['tipo']} ${c['telefono']}'),
+                    subtitle: Text('${c['tipo']}'),
                   ),
                 );
               },
@@ -929,95 +1162,27 @@ class _ClientesScreenState extends State<ClientesScreen> {
   }
 }
 
-class CobrosScreen extends StatefulWidget {
-  final VoidCallback onChanged;
-  const CobrosScreen({super.key, required this.onChanged});
-
-  @override
-  State<CobrosScreen> createState() => _CobrosScreenState();
-}
-
-class _CobrosScreenState extends State<CobrosScreen> {
-  List cobros = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final db = await DatabaseHelper.instance.database;
-    final res = await db.query(
-      'movimientos',
-      where: "tipo = 'COBRO' OR estado_cobro = 'Pendiente'",
-      orderBy: 'id DESC',
-    );
-    if (mounted) setState(() => cobros = res);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Cuentas por Cobrar'), backgroundColor: const Color(0xFF0B101B)),
-      body: cobros.isEmpty
-          ? const Center(child: Text('No hay cobros pendientes.', style: TextStyle(color: Colors.grey)))
-          : ListView.builder(
-              padding: const EdgeInsets.all(14),
-              itemCount: cobros.length,
-              itemBuilder: (context, i) {
-                final c = cobros[i];
-                final pend = (c['estado_cobro'] ?? '') == 'Pendiente';
-                return Card(
-                  color: const Color(0xFF131B2E),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    title: Text('${c['cliente_proveedor']} (${c['producto_nombre']} x${c['cantidad'] ?? 1})'),
-                    subtitle: Text('${c['fecha']} • ${c['metodo_pago']}'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('${(c['importe'] as num).toStringAsFixed(2)} €', style: TextStyle(color: pend ? Colors.orangeAccent : const Color(0xFF10B981), fontWeight: FontWeight.bold)),
-                        if (pend)
-                          IconButton(
-                            icon: const Icon(Icons.check_circle, color: Color(0xFF10B981)),
-                            onPressed: () async {
-                              final db = await DatabaseHelper.instance.database;
-                              await db.update('movimientos', {'tipo': 'VENTA', 'estado_cobro': 'Pagado'}, where: 'id = ?', whereArgs: [c['id']]);
-                              _cargar();
-                              widget.onChanged();
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved) async {
+Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bool esCreditoDefault = false}) async {
   final db = await DatabaseHelper.instance.database;
   final productos = await db.query('productos', orderBy: 'nombre ASC');
   final clientes = await db.query('clientes', orderBy: 'nombre ASC');
 
   if (productos.isEmpty) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea al menos un producto en Inventario & Stock (menú inferior derecho).')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea un producto en Inventario & Stock (menú +).')));
     }
     return;
   }
 
   Map prodSel = productos.first;
   String tarifaSel = 'Cliente Final (PVP)';
-  String metodoPago = 'Contado / Efectivo';
-  String estadoCobro = 'Pagado';
+  String metodoPago = esCreditoDefault ? 'Crédito / Fiado' : 'Contado / Efectivo';
+  String estadoCobro = esCreditoDefault ? 'Pendiente' : 'Pagado';
 
   final cantidadCtrl = TextEditingController(text: '1');
   final clienteCtrl = TextEditingController();
   final totalCtrl = TextEditingController(text: ((prodSel['precio_pvp'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2));
+  final vencCtrl = TextEditingController(text: DateTime.now().add(const Duration(days: 7)).toIso8601String().split('T')[0]);
 
   void recalcularTotal() {
     final cant = int.tryParse(cantidadCtrl.text) ?? 1;
@@ -1033,7 +1198,7 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved) asy
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setStateDlg) => AlertDialog(
-        title: const Text('Registrar Nueva Venta'),
+        title: const Text('Registrar Venta / Cobro'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1051,12 +1216,12 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved) asy
                   recalcularTotal();
                 }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               TextField(
                 controller: clienteCtrl,
                 decoration: InputDecoration(
                   labelText: 'Cliente / Colaborador',
-                  hintText: 'Escribe nombre o elige de la lista',
+                  hintText: 'Escribe o elige de la flecha',
                   suffixIcon: clientes.isEmpty
                       ? null
                       : PopupMenuButton<String>(
@@ -1079,7 +1244,7 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved) asy
                         ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   SizedBox(
@@ -1109,13 +1274,13 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved) asy
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               TextField(
                 controller: totalCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(labelText: 'Importe Total (€)'),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 value: metodoPago,
                 decoration: const InputDecoration(labelText: 'Método de Pago'),
@@ -1130,16 +1295,23 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved) asy
                   estadoCobro = metodoPago.contains('Crédito') ? 'Pendiente' : 'Pagado';
                 }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 value: estadoCobro,
-                decoration: const InputDecoration(labelText: 'Estado del Cobro'),
+                decoration: const InputDecoration(labelText: 'Estado'),
                 items: const [
-                  DropdownMenuItem(value: 'Pagado', child: Text('Cobrado / Pagado')),
+                  DropdownMenuItem(value: 'Pagado', child: Text('Pagado / Cobrado')),
                   DropdownMenuItem(value: 'Pendiente', child: Text('Pendiente de Cobro')),
                 ],
                 onChanged: (val) => setStateDlg(() => estadoCobro = val!),
               ),
+              if (estadoCobro == 'Pendiente') ...[
+                const SizedBox(height: 10),
+                TextField(
+                  controller: vencCtrl,
+                  decoration: const InputDecoration(labelText: 'Fecha Vencimiento (AAAA-MM-DD)'),
+                ),
+              ],
             ],
           ),
         ),
@@ -1171,6 +1343,7 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved) asy
                 'metodo_pago': metodoPago,
                 'estado_cobro': estadoCobro,
                 'fecha': fechaHoy,
+                'fecha_vencimiento': vencCtrl.text.trim().isEmpty ? fechaHoy : vencCtrl.text.trim(),
               });
 
               if (ctx.mounted) Navigator.pop(ctx);
@@ -1190,7 +1363,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
 
   if (productos.isEmpty) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea el producto en Inventario & Stock (menú inferior derecho).')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea el producto en Inventario & Stock (menú +).')));
     }
     return;
   }
@@ -1213,7 +1386,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setStateDlg) => AlertDialog(
-        title: const Text('Registrar Nueva Compra'),
+        title: const Text('Registrar Compra a Proveedor'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1233,9 +1406,9 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
                   recalcularCompra();
                 }),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor')),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
@@ -1257,7 +1430,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               TextField(
                 controller: totalCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1296,6 +1469,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
                 'metodo_pago': 'Contado / Transferencia',
                 'estado_cobro': 'Pagado',
                 'fecha': fechaHoy,
+                'fecha_vencimiento': fechaHoy,
               });
 
               if (ctx.mounted) Navigator.pop(ctx);
