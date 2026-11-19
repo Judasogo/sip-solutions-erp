@@ -30,6 +30,25 @@ class ERPJuanApp extends StatelessWidget {
           surface: Color(0xFF121927),
           error: Color(0xFFEF4444),
         ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF1B2436),
+          labelStyle: const TextStyle(color: Color(0xFF60A5FA), fontSize: 12, fontWeight: FontWeight.w500),
+          hintStyle: TextStyle(color: Colors.grey[500], fontSize: 13),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF2A364E)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF2F81F7), width: 1.6),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF2A364E)),
+          ),
+        ),
         useMaterial3: true,
       ),
       home: const DashboardPrincipal(),
@@ -119,6 +138,20 @@ class DatabaseHelper {
   }
 }
 
+Widget _botonGuardarBusiness({required String texto, required VoidCallback onPressed}) {
+  return ElevatedButton(
+    style: ElevatedButton.styleFrom(
+      backgroundColor: const Color(0xFF2F81F7),
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      elevation: 0,
+    ),
+    onPressed: onPressed,
+    child: Text(texto, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+  );
+}
+
 class DashboardPrincipal extends StatefulWidget {
   const DashboardPrincipal({super.key});
 
@@ -165,7 +198,6 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
 
     List listaVencimientos = [];
 
-    // Preparar últimos 6 meses para gráfica
     List mesesKeys = [];
     List mesesLabels = [];
     const nombresMes = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -209,10 +241,8 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
       }
     }
 
-    // Ordenar vencimientos: primero más vencidos
     listaVencimientos.sort((a, b) => (b['dias_retraso'] as int).compareTo(a['dias_retraso'] as int));
 
-    // Calcular valoración de stock y alertas de stock bajo
     double vStock = 0.0;
     int sBajo = 0;
     for (var pr in prods) {
@@ -314,8 +344,8 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
             const SizedBox(height: 14),
             ListTile(
               leading: const Icon(Icons.inventory_2_outlined, color: Color(0xFF60A5FA)),
-              title: const Text('Inventario & Stock', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Productos, precios PVP / Colaborador y alertas', style: TextStyle(color: Colors.grey, fontSize: 12)),
+              title: const Text('Inventario & Tarifas', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Productos, precios PVP / Especial Colaborador y stock', style: TextStyle(color: Colors.grey, fontSize: 12)),
               onTap: () {
                 Navigator.pop(ctx);
                 Navigator.push(context, MaterialPageRoute(builder: (_) => StockScreen(onChanged: _refrescarTodo)));
@@ -357,7 +387,9 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
           final pvp = costo * (1 + margen / 100);
           final ben = pvp - costo;
           return AlertDialog(
-            title: const Text('Simulador de Precios'),
+            backgroundColor: const Color(0xFF121927),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFF23304A))),
+            title: const Text('Simulador de Precios', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -367,7 +399,7 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
                   decoration: const InputDecoration(labelText: 'Costo Unitario (€)'),
                   onChanged: (_) => setStateDlg(() {}),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 TextField(
                   controller: margenCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -376,19 +408,25 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: const Color(0xFF1A2336), borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1B2436),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF2A364E)),
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('PVP: ${pvp.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text('Beneficio: +${ben.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('PVP: ${pvp.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.bold, fontSize: 15)),
+                      Text('+${ben.toStringAsFixed(2)} €', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 15)),
                     ],
                   ),
                 ),
               ],
             ),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar'))],
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cerrar', style: TextStyle(color: Colors.grey))),
+            ],
           );
         },
       ),
@@ -416,7 +454,6 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 30),
             children: [
-              // 1. Cabecera Principal estilo Dashboard
               Row(
                 children: [
                   Container(
@@ -481,7 +518,6 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
 
               const SizedBox(height: 14),
 
-              // 2. Barra de Alerta de Deuda y Exportar
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
@@ -515,7 +551,6 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
 
               const SizedBox(height: 14),
 
-              // 3. Grid 2x2 de KPIs Principales
               Row(
                 children: [
                   Expanded(
@@ -582,7 +617,6 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
 
               const SizedBox(height: 16),
 
-              // 4. Tarjeta Próximos Vencimientos de Cobro
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
@@ -690,7 +724,6 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
 
               const SizedBox(height: 16),
 
-              // 5. Gráfica Rendimiento de Ventas
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -737,7 +770,6 @@ class _DashboardPrincipalState extends State<DashboardPrincipal> {
 
               const SizedBox(height: 18),
 
-              // 6. Historial / Kardex Integrado con Filtros
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -1012,44 +1044,81 @@ class _StockScreenState extends State<StockScreen> {
   void _dialogoProducto([Map? prod]) {
     final nombreCtrl = TextEditingController(text: prod?['nombre'] ?? '');
     final stockCtrl = TextEditingController(text: (prod?['stock'] ?? 0).toString());
-    final costoCtrl = TextEditingController(text: (prod?['costo_compra'] ?? '').toString());
-    final pvpCtrl = TextEditingController(text: (prod?['precio_pvp'] ?? '').toString());
-    final colabCtrl = TextEditingController(text: (prod?['precio_colaborador'] ?? '').toString());
+    final costoCtrl = TextEditingController(text: prod != null ? (prod['costo_compra'] as num).toStringAsFixed(2) : '');
+    final pvpCtrl = TextEditingController(text: prod != null ? (prod['precio_pvp'] as num).toStringAsFixed(2) : '');
+    final colabCtrl = TextEditingController(text: prod != null ? (prod['precio_colaborador'] as num).toStringAsFixed(2) : '');
     final provCtrl = TextEditingController(text: prod?['proveedor'] ?? '');
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(prod == null ? 'Nuevo Producto' : 'Editar Producto'),
+        backgroundColor: const Color(0xFF121927),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF23304A)),
+        ),
+        title: Text(
+          prod == null ? 'Nuevo Producto' : 'Editar Producto',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre del Producto')),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor habitual')),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: TextField(controller: stockCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock Actual'))),
+                  Expanded(
+                    child: TextField(
+                      controller: stockCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Stock Actual'),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: TextField(controller: costoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Costo (€)'))),
+                  Expanded(
+                    child: TextField(
+                      controller: costoCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Costo (€)'),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: TextField(controller: pvpCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Precio PVP (€)'))),
+                  Expanded(
+                    child: TextField(
+                      controller: pvpCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Precio PVP (€)'),
+                    ),
+                  ),
                   const SizedBox(width: 10),
-                  Expanded(child: TextField(controller: colabCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Precio Colab (€)'))),
+                  Expanded(
+                    child: TextField(
+                      controller: colabCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Precio Colab (€)'),
+                    ),
+                  ),
                 ],
               ),
             ],
           ),
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.w600)),
+          ),
+          _botonGuardarBusiness(
+            texto: 'Guardar',
             onPressed: () async {
               final nombre = nombreCtrl.text.trim();
               if (nombre.isEmpty) return;
@@ -1071,7 +1140,6 @@ class _StockScreenState extends State<StockScreen> {
               _cargar();
               widget.onChanged();
             },
-            child: const Text('Guardar'),
           ),
         ],
       ),
@@ -1081,35 +1149,95 @@ class _StockScreenState extends State<StockScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Inventario & Stock'), backgroundColor: const Color(0xFF0A0F1A)),
+      appBar: AppBar(
+        title: const Text('Inventario & Tarifas', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF0A0F1A),
+      ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF2F81F7),
         onPressed: () => _dialogoProducto(),
         child: const Icon(Icons.add, color: Colors.white),
       ),
-      body: productos.isEmpty
-          ? const Center(child: Text('Pulsa + para añadir tus productos al inventario.', style: TextStyle(color: Colors.grey)))
-          : ListView.builder(
-              padding: const EdgeInsets.all(14),
-              itemCount: productos.length,
-              itemBuilder: (context, i) {
-                final pr = productos[i];
-                final st = (pr['stock'] as int?) ?? 0;
-                return Card(
-                  color: const Color(0xFF121927),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    onTap: () => _dialogoProducto(pr),
-                    title: Text(pr['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    subtitle: Text('Costo: ${pr['costo_compra']}€ | PVP: ${pr['precio_pvp']}€ | Colab: ${pr['precio_colaborador']}€'),
-                    trailing: Text(
-                      '$st uds',
-                      style: TextStyle(color: st <= 3 ? const Color(0xFFF59E0B) : const Color(0xFF10B981), fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                );
-              },
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
+            child: Text(
+              'Toca el lápiz para editar PVP, Precio Colaborador o stock.',
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
             ),
+          ),
+          Expanded(
+            child: productos.isEmpty
+                ? const Center(child: Text('Pulsa + para añadir tus productos al inventario.', style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 80),
+                    itemCount: productos.length,
+                    itemBuilder: (context, i) {
+                      final pr = productos[i];
+                      final st = (pr['stock'] as int?) ?? 0;
+                      final pvp = ((pr['precio_pvp'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2);
+                      final col = ((pr['precio_colaborador'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2);
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF121927),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF23304A)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1B2436),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF60A5FA), size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(pr['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 10,
+                                    children: [
+                                      Text('PVP: $pvp €', style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12)),
+                                      Text('Especial Col.: $col €', style: const TextStyle(color: Color(0xFFEC4899), fontWeight: FontWeight.bold, fontSize: 12)),
+                                      Text('Stock: $st uds', style: TextStyle(color: st <= 3 ? const Color(0xFFF59E0B) : Colors.grey[400], fontSize: 12)),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Color(0xFF60A5FA), size: 20),
+                              onPressed: () => _dialogoProducto(pr),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
+                              onPressed: () async {
+                                final db = await DatabaseHelper.instance.database;
+                                await db.delete('productos', where: 'id = ?', whereArgs: [pr['id']]);
+                                _cargar();
+                                widget.onChanged();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1148,12 +1276,23 @@ class _ClientesScreenState extends State<ClientesScreen> {
               itemCount: clientes.length,
               itemBuilder: (context, i) {
                 final c = clientes[i];
-                return Card(
-                  color: const Color(0xFF121927),
+                final esColab = c['tipo'] == 'Colaborador';
+                return Container(
                   margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF121927),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFF23304A)),
+                  ),
                   child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: const Color(0xFF1B2436),
+                      child: Icon(Icons.person, color: esColab ? const Color(0xFFEC4899) : const Color(0xFF60A5FA)),
+                    ),
                     title: Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                    subtitle: Text('${c['tipo']}'),
+                    subtitle: Text('${c['tipo']}', style: TextStyle(color: esColab ? const Color(0xFFEC4899) : const Color(0xFF10B981), fontSize: 12)),
                   ),
                 );
               },
@@ -1169,7 +1308,7 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
 
   if (productos.isEmpty) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea un producto en Inventario & Stock (menú +).')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea un producto en Inventario & Tarifas (menú +).')));
     }
     return;
   }
@@ -1198,7 +1337,15 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setStateDlg) => AlertDialog(
-        title: const Text('Registrar Venta / Cobro'),
+        backgroundColor: const Color(0xFF121927),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF23304A)),
+        ),
+        title: Text(
+          esCreditoDefault ? 'Nueva Cuenta por Cobrar' : 'Registrar Nueva Venta',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1206,17 +1353,18 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
               DropdownButtonFormField<int>(
                 value: prodSel['id'] as int,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Producto'),
+                dropdownColor: const Color(0xFF1B2436),
+                decoration: const InputDecoration(labelText: 'Producto del Stock'),
                 items: productos.map((pr) => DropdownMenuItem<int>(
                   value: pr['id'] as int,
-                  child: Text('${pr['nombre']} (PVP ${pr['precio_pvp']}€ / Col ${pr['precio_colaborador']}€)'),
+                  child: Text('${pr['nombre']} (PVP ${pr['precio_pvp']}€ / Col ${pr['precio_colaborador']}€)', style: const TextStyle(fontSize: 13)),
                 )).toList(),
                 onChanged: (id) => setStateDlg(() {
                   prodSel = productos.firstWhere((e) => e['id'] == id);
                   recalcularTotal();
                 }),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               TextField(
                 controller: clienteCtrl,
                 decoration: InputDecoration(
@@ -1225,7 +1373,8 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
                   suffixIcon: clientes.isEmpty
                       ? null
                       : PopupMenuButton<String>(
-                          icon: const Icon(Icons.arrow_drop_down),
+                          color: const Color(0xFF1B2436),
+                          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF60A5FA)),
                           onSelected: (nombreElegido) {
                             setStateDlg(() {
                               clienteCtrl.text = nombreElegido;
@@ -1244,11 +1393,11 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
                         ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   SizedBox(
-                    width: 85,
+                    width: 90,
                     child: TextField(
                       controller: cantidadCtrl,
                       keyboardType: TextInputType.number,
@@ -1261,7 +1410,8 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
                     child: DropdownButtonFormField<String>(
                       value: tarifaSel,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Tarifa'),
+                      dropdownColor: const Color(0xFF1B2436),
+                      decoration: const InputDecoration(labelText: 'Tarifa Aplicada'),
                       items: const [
                         DropdownMenuItem(value: 'Cliente Final (PVP)', child: Text('Cliente Final (PVP)')),
                         DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador')),
@@ -1274,15 +1424,17 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               TextField(
                 controller: totalCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(labelText: 'Importe Total (€)'),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: metodoPago,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF1B2436),
                 decoration: const InputDecoration(labelText: 'Método de Pago'),
                 items: const [
                   DropdownMenuItem(value: 'Contado / Efectivo', child: Text('Contado / Efectivo')),
@@ -1295,29 +1447,36 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
                   estadoCobro = metodoPago.contains('Crédito') ? 'Pendiente' : 'Pagado';
                 }),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: estadoCobro,
-                decoration: const InputDecoration(labelText: 'Estado'),
+                isExpanded: true,
+                dropdownColor: const Color(0xFF1B2436),
+                decoration: const InputDecoration(labelText: 'Estado del Cobro'),
                 items: const [
-                  DropdownMenuItem(value: 'Pagado', child: Text('Pagado / Cobrado')),
+                  DropdownMenuItem(value: 'Pagado', child: Text('Cobrado / Pagado')),
                   DropdownMenuItem(value: 'Pendiente', child: Text('Pendiente de Cobro')),
                 ],
                 onChanged: (val) => setStateDlg(() => estadoCobro = val!),
               ),
               if (estadoCobro == 'Pendiente') ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 TextField(
                   controller: vencCtrl,
-                  decoration: const InputDecoration(labelText: 'Fecha Vencimiento (AAAA-MM-DD)'),
+                  decoration: const InputDecoration(labelText: 'Vencimiento (AAAA-MM-DD)'),
                 ),
               ],
             ],
           ),
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.w600)),
+          ),
+          _botonGuardarBusiness(
+            texto: 'Guardar',
             onPressed: () async {
               final clienteNombre = clienteCtrl.text.trim().isEmpty ? 'Cliente General' : clienteCtrl.text.trim();
               final cant = int.tryParse(cantidadCtrl.text) ?? 1;
@@ -1349,7 +1508,6 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
               if (ctx.mounted) Navigator.pop(ctx);
               onSaved();
             },
-            child: const Text('Guardar'),
           ),
         ],
       ),
@@ -1363,7 +1521,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
 
   if (productos.isEmpty) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea el producto en Inventario & Stock (menú +).')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Primero crea el producto en Inventario & Tarifas (menú +).')));
     }
     return;
   }
@@ -1386,7 +1544,12 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setStateDlg) => AlertDialog(
-        title: const Text('Registrar Compra a Proveedor'),
+        backgroundColor: const Color(0xFF121927),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF23304A)),
+        ),
+        title: const Text('Registrar Nueva Compra', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1394,10 +1557,11 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
               DropdownButtonFormField<int>(
                 value: prodSel['id'] as int,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Producto'),
+                dropdownColor: const Color(0xFF1B2436),
+                decoration: const InputDecoration(labelText: 'Producto del Stock'),
                 items: productos.map((pr) => DropdownMenuItem<int>(
                   value: pr['id'] as int,
-                  child: Text('${pr['nombre']} (Stock: ${pr['stock']})'),
+                  child: Text('${pr['nombre']} (Stock: ${pr['stock']})', style: const TextStyle(fontSize: 13)),
                 )).toList(),
                 onChanged: (id) => setStateDlg(() {
                   prodSel = productos.firstWhere((e) => e['id'] == id);
@@ -1406,9 +1570,9 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
                   recalcularCompra();
                 }),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor')),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -1430,7 +1594,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               TextField(
                 controller: totalCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1439,9 +1603,14 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
             ],
           ),
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: Color(0xFF60A5FA), fontWeight: FontWeight.w600)),
+          ),
+          _botonGuardarBusiness(
+            texto: 'Guardar Compra',
             onPressed: () async {
               final cant = int.tryParse(cantidadCtrl.text) ?? 1;
               final unit = double.tryParse(costoUnitCtrl.text.replaceAll(',', '.')) ?? 0.0;
@@ -1475,7 +1644,6 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
               if (ctx.mounted) Navigator.pop(ctx);
               onSaved();
             },
-            child: const Text('Guardar Compra'),
           ),
         ],
       ),
