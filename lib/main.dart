@@ -313,7 +313,7 @@ class CobrosTab extends StatefulWidget {
 }
 
 class _CobrosTabState extends State<CobrosTab> {
-  List> cobros = [];
+  List cobros = [];
 
   @override
   void initState() {
@@ -331,7 +331,7 @@ class _CobrosTabState extends State<CobrosTab> {
     if (mounted) setState(() => cobros = res);
   }
 
-  Future<void> _marcarComoCobrado(Map<String, dynamic> item) async {
+  Future<void> _marcarComoCobrado(Map item) async {
     final db = await DatabaseHelper.instance.database;
     await db.update(
       'movimientos',
@@ -412,7 +412,7 @@ class StockTab extends StatefulWidget {
 }
 
 class _StockTabState extends State<StockTab> {
-  List> productos = [];
+  List productos = [];
 
   @override
   void initState() {
@@ -426,7 +426,7 @@ class _StockTabState extends State<StockTab> {
     if (mounted) setState(() => productos = res);
   }
 
-  void _dialogoProducto([Map<String, dynamic>? prod]) {
+  void _dialogoProducto([Map? prod]) {
     final nombreCtrl = TextEditingController(text: prod?['nombre'] ?? '');
     final stockCtrl = TextEditingController(text: (prod?['stock'] ?? 0).toString());
     final costoCtrl = TextEditingController(text: (prod?['costo_compra'] ?? '').toString());
@@ -558,7 +558,7 @@ class KardexTab extends StatefulWidget {
 
 class _KardexTabState extends State<KardexTab> {
   String filtro = 'TODOS';
-  List> movimientos = [];
+  List movimientos = [];
 
   @override
   void initState() {
@@ -568,7 +568,7 @@ class _KardexTabState extends State<KardexTab> {
 
   Future<void> _cargarMovimientos() async {
     final db = await DatabaseHelper.instance.database;
-    List> res;
+    var res = [];
     if (filtro == 'TODOS') {
       res = await db.query('movimientos', orderBy: 'id DESC');
     } else if (filtro == 'VENTA') {
@@ -689,7 +689,7 @@ class ClientesTab extends StatefulWidget {
 }
 
 class _ClientesTabState extends State<ClientesTab> {
-  List> clientes = [];
+  List clientes = [];
 
   @override
   void initState() {
@@ -807,7 +807,7 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
     return;
   }
 
-  Map<String, dynamic> prodSel = productos.first;
+  Map prodSel = productos.first;
   String tarifaSel = 'Cliente Final (PVP)';
   String metodoPago = 'Contado / Efectivo';
   String estadoCobro = esDesdeCobros ? 'Pendiente' : 'Pagado';
@@ -1007,7 +1007,7 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
     return;
   }
 
-  Map<String, dynamic> prodSel = productos.first;
+  Map prodSel = productos.first;
   final provCtrl = TextEditingController(text: prodSel['proveedor']?.toString() ?? '');
   final cantidadCtrl = TextEditingController(text: '1');
   final costoUnitCtrl = TextEditingController(text: ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2));
