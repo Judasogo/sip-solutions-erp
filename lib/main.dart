@@ -110,7 +110,7 @@ class DatabaseHelper {
 
   Future<void> asegurarCliente(String nombre, String tipoTarifa) async {
     final limpio = nombre.trim();
-    if (limpio.isEmpty) return;
+    if (limpio.isEmpty || limpio == 'Cliente General') return;
     final db = await database;
     final existe = await db.query(
       'clientes',
@@ -205,8 +205,12 @@ class _DashboardTabState extends State<DashboardTab> {
         if (estado == 'Pendiente') pCobro += imp;
       } else if (tipo == 'COMPRA') {
         c += imp;
-      } else if (tipo == 'COBRO' && estado == 'Pendiente') {
-        pCobro += imp;
+      } else if (tipo == 'COBRO') {
+        if (estado == 'Pendiente') {
+          pCobro += imp;
+        } else {
+          v += imp;
+        }
       }
     }
 
@@ -570,7 +574,7 @@ class _KardexTabState extends State<KardexTab> {
     } else if (filtro == 'VENTA') {
       res = await db.query(
         'movimientos',
-        where: "tipo = 'VENTA' OR (tipo = 'COBRO' AND estado_cobro = 'Pagado')",
+        where: "tipo = 'VENTA' OR tipo = 'COBRO'",
         orderBy: 'id DESC',
       );
     } else {
@@ -846,42 +850,42 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
                 }),
               ),
               const SizedBox(height: 12),
-              Autocomplete>(
-                optionsBuilder: (TextEditingValue textVal) {
-                  if (textVal.text.isEmpty) return clientes;
-                  return clientes.where((c) => c['nombre'].toString().toLowerCase().contains(textVal.text.toLowerCase()));
-                },
-                displayStringForOption: (opt) => opt['nombre'].toString(),
-                onSelected: (opt) => setStateDlg(() {
-                  clienteCtrl.text = opt['nombre'].toString();
-                  tarifaSel = opt['tipo'] == 'Colaborador' ? 'Colaborador' : 'Cliente Final (PVP)';
-                  recalcularTotal();
-                }),
-                fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
-                  textController.addListener(() => clienteCtrl.text = textController.text);
-                  return TextField(
-                    controller: textController,
-                    focusNode: focusNode,
-                    decoration: InputDecoration(
-                      labelText: 'Cliente / Colaborador',
-                      hintText: 'Selecciona o escribe nuevo...',
-                      suffixIcon: clientes.isNotEmpty
-                          ? PopupMenuButton>(
-                              icon: const Icon(Icons.arrow_drop_down),
-                              onSelected: (opt) {
-                                textController.text = opt['nombre'].toString();
-                                setStateDlg(() {
-                                  clienteCtrl.text = opt['nombre'].toString();
-                                  tarifaSel = opt['tipo'] == 'Colaborador' ? 'Colaborador' : 'Cliente Final (PVP)';
-                                  recalcularTotal();
-                                });
-                              },
-                              itemBuilder: (_) => clientes.map((c) => PopupMenuItem(value: c, child: Text('${c['nombre']} (${c['tipo']})'))).toList(),
-                            )
-                          : null,
-                    ),
-                  );
-                },
+              TextField(
+                controller: clienteCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Cliente / Colaborador',
+                  hintText: 'Escribe nombre o elige de la flecha',
+                  suffixIcon: clientes.isEmpty
+                      ? null
+                      : PopupMenuButton<String>(
+                          icon: const Icon(Icons.arrow_drop_down),
+                          onSelected: (nombreElegido) {
+                            setStateDlg(() {
+                              clienteCtrl.text = nombreElegido;
+                              final encontrado = clientes.firstWhere(
+                                (c) => c['nombre'] == nombreElegido,
+                                orElse: () => {},
+                              );
+                              if (encontrado['tipo'] == 'Colaborador') {
+                                tarifaSel = 'Colaborador';
+                              } else {
+                                tarifaSel = 'Cliente Final (PVP)';
+                              }
+                              recalcularTotal();
+                            });
+                          },
+                          itemBuilder: (BuildContext context) {
+                            return clientes.map((c) {
+                              final nom = c['nombre'].toString();
+                              final tip = c['tipo'].toString();
+                              return PopupMenuItem<String>(
+                                value: nom,
+                                child: Text('$nom ($tip)'),
+                              );
+                            }).toList();
+                          },
+                        ),
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -914,7 +918,11 @@ Future<void> mostrarDialogoVenta(BuildContext context, VoidCallback onSaved, {bo
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(controller: totalCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Importe Total (€)')),
+              TextField(
+                controller: totalCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Importe Total (€)'),
+              ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: metodoPago,
@@ -1062,7 +1070,11 @@ Future<void> mostrarDialogoCompra(BuildContext context, VoidCallback onSaved) as
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(controller: totalCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Total Compra (€)')),
+              TextField(
+                controller: totalCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Total Compra (€)'),
+              ),
             ],
           ),
         ),
