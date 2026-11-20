@@ -9,6 +9,22 @@ void main() async {
   runApp(const ERPJuanApp());
 }
 
+class _BusinessColors {
+  static const bg = Color(0xFF0B0F17);
+  static const card = Color(0xFF121926);
+  static const surface = Color(0xFF182234);
+  static const border = Color(0xFF233044);
+  static const primaryBlue = Color(0xFF3B82F6);
+  static const softBlue = Color(0xFF60A5FA);
+  static const emerald = Color(0xFF10B981);
+  static const emeraldBright = Color(0xFF34D399);
+  static const amber = Color(0xFFD97706);
+  static const amberSoft = Color(0xFFF59E0B);
+  static const danger = Color(0xFFEF4444);
+  static const textMain = Color(0xFFF1F5F9);
+  static const textMuted = Color(0xFF94A3B8);
+}
+
 class ERPJuanApp extends StatelessWidget {
   const ERPJuanApp({super.key});
 
@@ -20,33 +36,33 @@ class ERPJuanApp extends StatelessWidget {
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0A0F1A),
-        primaryColor: const Color(0xFF22C55E),
-        cardColor: const Color(0xFF111824),
-        dialogBackgroundColor: const Color(0xFF111824),
+        scaffoldBackgroundColor: _BusinessColors.bg,
+        primaryColor: _BusinessColors.primaryBlue,
+        cardColor: _BusinessColors.card,
+        dialogBackgroundColor: _BusinessColors.card,
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF22C55E),
-          secondary: Color(0xFF3B82F6),
-          surface: Color(0xFF111824),
-          error: Color(0xFFEF4444),
+          primary: _BusinessColors.primaryBlue,
+          secondary: _BusinessColors.emerald,
+          surface: _BusinessColors.card,
+          error: _BusinessColors.danger,
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: const Color(0xFF162030),
-          labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w500),
+          fillColor: _BusinessColors.surface,
+          labelStyle: const TextStyle(color: _BusinessColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
           hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF243247)),
+            borderSide: const BorderSide(color: _BusinessColors.border),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF22C55E), width: 1.5),
+            borderSide: const BorderSide(color: _BusinessColors.primaryBlue, width: 1.5),
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF243247)),
+            borderSide: const BorderSide(color: _BusinessColors.border),
           ),
         ),
         useMaterial3: true,
@@ -64,7 +80,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('erp_juan_v4.db');
+    _database = await _initDB('erp_juan_v5.db');
     return _database!;
   }
 
@@ -182,13 +198,201 @@ class _MainShellState extends State<MainShell> {
     if (guardada == true) _notificarCambio();
   }
 
+  Future<void> _abrirNuevaCompraDialog() async {
+    final guardada = await mostrarDialogoCompra(context);
+    if (guardada == true) _notificarCambio();
+  }
+
+  void _mostrarCalculadoraMargenes() {
+    final costoCtrl = TextEditingController(text: '10,00');
+    final pvpCtrl = TextEditingController(text: '25,00');
+    final colabCtrl = TextEditingController(text: '18,00');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          double parse(String s) => double.tryParse(s.replaceAll(',', '.').trim()) ?? 0.0;
+          final c = parse(costoCtrl.text);
+          final pvp = parse(pvpCtrl.text);
+          final col = parse(colabCtrl.text);
+          final benPvp = pvp - c;
+          final pctPvp = pvp > 0 ? ((benPvp / pvp) * 100) : 0.0;
+          final benCol = col - c;
+          final pctCol = col > 0 ? ((benCol / col) * 100) : 0.0;
+
+          return AlertDialog(
+            backgroundColor: _BusinessColors.card,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: const BorderSide(color: _BusinessColors.border),
+            ),
+            title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: costoCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Coste unitario (€)'),
+                    onChanged: (_) => setDlg(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: pvpCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Precio PVP (€)'),
+                          onChanged: (_) => setDlg(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: colabCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(labelText: 'Precio Colab. (€)'),
+                          onChanged: (_) => setDlg(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _BusinessColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _BusinessColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PVP: +${_fmtEur(benPvp)} (${pctPvp.toStringAsFixed(1).replaceAll('.', ',')} %)',
+                          style: const TextStyle(color: _BusinessColors.emeraldBright, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Colaborador: +${_fmtEur(benCol)} (${pctCol.toStringAsFixed(1).replaceAll('.', ',')} %)',
+                          style: const TextStyle(color: _BusinessColors.softBlue, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cerrar', style: TextStyle(color: _BusinessColors.softBlue, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _abrirMenuMas() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _BusinessColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        side: BorderSide(color: _BusinessColors.border),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Acciones & Módulos ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _BusinessColors.emerald,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                    label: const Text('Nueva Venta', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _abrirNuevaVentaPantalla();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _BusinessColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.inventory_rounded, size: 18),
+                    label: const Text('Nueva Compra', style: TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _abrirNuevaCompraDialog();
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              leading: const Icon(Icons.inventory_2_outlined, color: _BusinessColors.softBlue),
+              title: const Text('Inventario & Tarifas', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Productos, precios PVP / Especial Colaborador y stock', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _irAPestana(2, soloStockBajo: false);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.people_alt_outlined, color: _BusinessColors.emeraldBright),
+              title: const Text('Clientes & Colaboradores', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Base de datos autorrellenable y tarifas', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _irAPestana(5);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.calculate_outlined, color: _BusinessColors.amberSoft),
+              title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Simula precios y beneficios unitarios', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _mostrarCalculadoraMargenes();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pantallas = [
       DashboardScreen(
         key: ValueKey('dash_$_refreshTick'),
         onChanged: _notificarCambio,
-        onNuevaVenta: _abrirNuevaVentaPantalla,
+        onAbrirMenuMas: _abrirMenuMas,
         onIrPestana: _irAPestana,
       ),
       VentasScreen(
@@ -199,6 +403,7 @@ class _MainShellState extends State<MainShell> {
       StockScreen(
         key: ValueKey('stock_$_refreshTick'),
         onChanged: _notificarCambio,
+        onNuevaCompra: _abrirNuevaCompraDialog,
         soloStockBajoInicial: _soloStockBajoInicial,
       ),
       CobrosScreen(
@@ -209,6 +414,8 @@ class _MainShellState extends State<MainShell> {
       KardexScreen(
         key: ValueKey('kardex_$_refreshTick'),
         onChanged: _notificarCambio,
+        onNuevaVenta: _abrirNuevaVentaPantalla,
+        onNuevaCompra: _abrirNuevaCompraDialog,
         filtroInicial: _filtroKardexInicial,
       ),
       ClientesScreen(
@@ -221,15 +428,15 @@ class _MainShellState extends State<MainShell> {
       body: SafeArea(child: pantallas[_index]),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0E1420),
-          border: Border(top: BorderSide(color: Color(0xFF1E293B))),
+          color: _BusinessColors.card,
+          border: Border(top: BorderSide(color: _BusinessColors.border)),
         ),
         child: BottomNavigationBar(
           currentIndex: _index,
           type: BottomNavigationBarType.fixed,
-          backgroundColor: const Color(0xFF0E1420),
-          selectedItemColor: const Color(0xFF22C55E),
-          unselectedItemColor: const Color(0xFF94A3B8),
+          backgroundColor: _BusinessColors.card,
+          selectedItemColor: _BusinessColors.softBlue,
+          unselectedItemColor: _BusinessColors.textMuted,
           selectedFontSize: 11,
           unselectedFontSize: 11,
           onTap: (i) => _irAPestana(i, filtroKardex: 'TODOS', soloStockBajo: false),
@@ -249,13 +456,13 @@ class _MainShellState extends State<MainShell> {
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback onChanged;
-  final Future<void> Function() onNuevaVenta;
+  final VoidCallback onAbrirMenuMas;
   final void Function(int idx, {String? filtroKardex, bool? soloStockBajo}) onIrPestana;
 
   const DashboardScreen({
     super.key,
     required this.onChanged,
-    required this.onNuevaVenta,
+    required this.onAbrirMenuMas,
     required this.onIrPestana,
   });
 
@@ -314,7 +521,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     int cOps = 0;
     List listaVenc = [];
 
-    // Últimos 6 meses para barras Ventas vs Compras
     List clavesMes = [];
     List etiquetas = [];
     const mesesNom = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -412,12 +618,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     sb.writeln('ERP JUAN — Panel ($periodo)');
     sb.writeln('Ingresos: ${_fmtEur(ingresos)}');
     sb.writeln('Por cobrar: ${_fmtEur(porCobrar)} ($vencidasCount vencidas)');
+    sb.writeln('Compras: ${_fmtEur(comprasPeriodo)} ($comprasCount órdenes)');
     sb.writeln('Valor stock: ${_fmtEur(valorStock)} ($stockBajoCount stock bajo)');
     sb.writeln('Margen bruto: ${_fmtEur(margenBruto)}');
     await Clipboard.setData(ClipboardData(text: sb.toString()));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Color(0xFF22C55E), content: Text('Resumen copiado al portapapeles')),
+        const SnackBar(backgroundColor: _BusinessColors.emerald, content: Text('Resumen copiado al portapapeles')),
       );
     }
   }
@@ -440,13 +647,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          // Cabecera ERP Juan
           Row(
             children: [
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: const Color(0xFF2F81F7), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(12)),
                 alignment: Alignment.center,
                 child: const Text('J', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
               ),
@@ -457,32 +663,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Row(
                       children: [
-                        const Text('ERP Juan', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),
+                        const Text('ERP Juan', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF132238),
+                            color: _BusinessColors.surface,
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFF2F81F7).withOpacity(0.5)),
+                            border: Border.all(color: _BusinessColors.primaryBlue.withOpacity(0.45)),
                           ),
-                          child: const Text('DARK UI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF60A5FA))),
+                          child: const Text('BUSINESS UI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _BusinessColors.softBlue)),
                         ),
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text('EN VIVO $horaFmt · $ventasCount ventas · $comprasCount compras', style: const TextStyle(fontSize: 11, color: Color(0xFF22C55E), fontWeight: FontWeight.w500)),
+                    Text('EN VIVO $horaFmt · $ventasCount ventas · $comprasCount compras', style: const TextStyle(fontSize: 11, color: _BusinessColors.emeraldBright, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
-              IconButton(icon: const Icon(Icons.refresh_rounded, color: Colors.white70), onPressed: _cargar),
+              IconButton(icon: const Icon(Icons.refresh_rounded, color: _BusinessColors.textMuted), onPressed: _cargar),
               GestureDetector(
-                onTap: widget.onNuevaVenta,
+                onTap: widget.onAbrirMenuMas,
                 child: Container(
                   width: 38,
                   height: 38,
-                  decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.add, color: Color(0xFF052E16), size: 24),
+                  decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.add, color: Colors.white, size: 24),
                 ),
               ),
             ],
@@ -490,7 +696,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 12),
 
-          // Filtros de periodo (Este mes / Esta semana / Hoy / Este año)
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -501,9 +706,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: ChoiceChip(
                     label: Text(pItem),
                     selected: sel,
-                    selectedColor: const Color(0xFF2F81F7),
-                    backgroundColor: const Color(0xFF111824),
-                    labelStyle: TextStyle(color: sel ? Colors.white : const Color(0xFF94A3B8), fontWeight: FontWeight.bold, fontSize: 12),
+                    selectedColor: _BusinessColors.primaryBlue,
+                    backgroundColor: _BusinessColors.card,
+                    side: BorderSide(color: sel ? _BusinessColors.primaryBlue : _BusinessColors.border),
+                    labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12),
                     onSelected: (_) {
                       setState(() => periodo = pItem);
                       _cargar();
@@ -516,34 +722,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 12),
 
-          // Banner Deudas vencidas & Exportar
           InkWell(
             borderRadius: BorderRadius.circular(10),
             onTap: () => widget.onIrPestana(3),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF1B141C),
+                color: const Color(0xFF1A151E),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.35)),
+                border: Border.all(color: _BusinessColors.danger.withOpacity(0.35)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444), size: 18),
+                  const Icon(Icons.error_outline_rounded, color: _BusinessColors.danger, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '$vencidasCount Deuda(s) Vencida(s) · Cobrar ${_fmtEur(porCobrar)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: 12, color: _BusinessColors.textMain, fontWeight: FontWeight.w500),
                     ),
                   ),
                   GestureDetector(
                     onTap: _exportarResumen,
                     child: const Row(
                       children: [
-                        Icon(Icons.download_rounded, color: Color(0xFF60A5FA), size: 16),
+                        Icon(Icons.download_rounded, color: _BusinessColors.softBlue, size: 16),
                         SizedBox(width: 4),
-                        Text('Exportar', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
+                        Text('Exportar', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
                       ],
                     ),
                   ),
@@ -554,7 +759,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 12),
 
-          // Tarjetas KPI interactivas 2x2
           Row(
             children: [
               Expanded(
@@ -562,8 +766,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   titulo: 'Por Cobrar',
                   valor: _fmtEur(porCobrar),
                   subtitulo: '$vencidasCount Vencidas (${_fmtEur(vencidoMonto)})',
-                  subColor: const Color(0xFFEF4444),
+                  subColor: _BusinessColors.danger,
                   badgeAccion: 'Cobros',
+                  accentColor: _BusinessColors.danger,
                   onTap: () => widget.onIrPestana(3),
                 ),
               ),
@@ -573,8 +778,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   titulo: 'Ingresos',
                   valor: _fmtEur(ingresos),
                   subtitulo: '$ventasCount ventas cobradas',
-                  subColor: const Color(0xFF22C55E),
+                  subColor: _BusinessColors.emeraldBright,
                   badgeAccion: 'Ventas',
+                  accentColor: _BusinessColors.emerald,
                   onTap: () => widget.onIrPestana(1),
                 ),
               ),
@@ -588,8 +794,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   titulo: 'Valor Stock',
                   valor: _fmtEur(valorStock),
                   subtitulo: 'En inventario activo',
-                  subColor: const Color(0xFF94A3B8),
+                  subColor: _BusinessColors.textMuted,
                   badgeAccion: 'Stock',
+                  accentColor: _BusinessColors.primaryBlue,
                   onTap: () => widget.onIrPestana(2, soloStockBajo: false),
                 ),
               ),
@@ -599,8 +806,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   titulo: 'Stock Bajo',
                   valor: '$stockBajoCount Prod.',
                   subtitulo: 'Requieren reposición',
-                  subColor: const Color(0xFFF59E0B),
+                  subColor: _BusinessColors.amberSoft,
                   badgeAccion: 'Reponer',
+                  accentColor: _BusinessColors.amberSoft,
                   onTap: () => widget.onIrPestana(2, soloStockBajo: true),
                 ),
               ),
@@ -614,8 +822,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   titulo: 'Margen Bruto',
                   valor: _fmtEur(margenBruto),
                   subtitulo: 'Ventas - Coste producto',
-                  subColor: const Color(0xFF60A5FA),
+                  subColor: _BusinessColors.softBlue,
                   badgeAccion: 'Kardex',
+                  accentColor: _BusinessColors.softBlue,
                   onTap: () => widget.onIrPestana(4, filtroKardex: 'VENTA'),
                 ),
               ),
@@ -625,8 +834,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   titulo: 'Compras',
                   valor: _fmtEur(comprasPeriodo),
                   subtitulo: '$comprasCount órdenes proveedor',
-                  subColor: const Color(0xFFF59E0B),
+                  subColor: _BusinessColors.amberSoft,
                   badgeAccion: 'Compras',
+                  accentColor: _BusinessColors.amber,
                   onTap: () => widget.onIrPestana(4, filtroKardex: 'COMPRA'),
                 ),
               ),
@@ -635,13 +845,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 16),
 
-          // Próximos vencimientos de cobro
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF111824),
+              color: _BusinessColors.card,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.35)),
+              border: Border.all(color: _BusinessColors.amber.withOpacity(0.4)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -651,14 +860,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.notifications_none_rounded, color: Color(0xFFF59E0B), size: 19),
+                        Icon(Icons.notifications_none_rounded, color: _BusinessColors.amberSoft, size: 19),
                         SizedBox(width: 8),
-                        Text('Próximos Vencimientos de Cobro', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B))),
+                        Text('Próximos Vencimientos de Cobro', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _BusinessColors.amberSoft)),
                       ],
                     ),
                     GestureDetector(
                       onTap: () => widget.onIrPestana(3),
-                      child: const Text('Ver Todo', style: TextStyle(fontSize: 12, color: Color(0xFF60A5FA), fontWeight: FontWeight.bold)),
+                      child: const Text('Ver Todo', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -667,8 +876,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: const Color(0xFF162030), borderRadius: BorderRadius.circular(10)),
-                    child: const Text('No hay cobros pendientes.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                    decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10)),
+                    child: const Text('No hay cobros pendientes.', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
                   )
                 else
                   ...vencimientos.take(3).map((v) {
@@ -677,19 +886,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: const Color(0xFF162030), borderRadius: BorderRadius.circular(10)),
+                      decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: _BusinessColors.border)),
                       child: Row(
                         children: [
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${v['cliente_proveedor']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
-                                Text('${v['producto_nombre']} · $badge', style: TextStyle(color: dias > 0 ? const Color(0xFFEF4444) : const Color(0xFF94A3B8), fontSize: 11)),
+                                Text('${v['cliente_proveedor']}', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
+                                Text('${v['producto_nombre']} · $badge', style: TextStyle(color: dias > 0 ? _BusinessColors.danger : _BusinessColors.textMuted, fontSize: 11)),
                               ],
                             ),
                           ),
-                          Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
+                          Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
                         ],
                       ),
                     );
@@ -700,20 +909,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           const SizedBox(height: 16),
 
-          // Comparativa Ventas vs Compras — últimos 6 meses
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF111824),
+              color: _BusinessColors.card,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF243247)),
+              border: Border.all(color: _BusinessColors.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Ventas vs Compras — últimos 6 meses', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                const Text('Ventas vs Compras — últimos 6 meses', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
                 const SizedBox(height: 3),
-                const Text('Se actualiza al crear una venta o compra.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                const Text('Se actualiza al crear una venta o compra.', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted)),
                 const SizedBox(height: 14),
                 ...barrasMeses.map((b) {
                   final mes = b['mes'].toString();
@@ -726,7 +934,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        SizedBox(width: 36, child: Text(mes, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w600))),
+                        SizedBox(width: 36, child: Text(mes, style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600))),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -735,7 +943,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 widthFactor: vFrac,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: const Color(0xFF2563EB), borderRadius: BorderRadius.circular(6)),
+                                  decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(6)),
                                   child: Text('Ventas ${vVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                                 ),
                               ),
@@ -744,7 +952,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 widthFactor: cFrac,
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(6)),
+                                  decoration: BoxDecoration(color: _BusinessColors.amber, borderRadius: BorderRadius.circular(6)),
                                   child: Text('Compras ${cVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
                                 ),
                               ),
@@ -769,10 +977,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required String subtitulo,
     required Color subColor,
     required String badgeAccion,
+    required Color accentColor,
     required VoidCallback onTap,
   }) {
     return Material(
-      color: const Color(0xFF111824),
+      color: _BusinessColors.card,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -781,7 +990,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.all(13),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF243247)),
+            border: Border.all(color: _BusinessColors.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -789,12 +998,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(titulo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))),
-                  Text('$badgeAccion →', style: const TextStyle(fontSize: 11, color: Color(0xFF60A5FA), fontWeight: FontWeight.w600)),
+                  Text(titulo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _BusinessColors.textMuted)),
+                  Text('$badgeAccion →', style: TextStyle(fontSize: 11, color: accentColor, fontWeight: FontWeight.w600)),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(valor, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(valor, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
               const SizedBox(height: 5),
               Text(subtitulo, style: TextStyle(fontSize: 11, color: subColor, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
             ],
@@ -803,6 +1012,208 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+}
+
+Future<bool> mostrarDialogoCompra(BuildContext context) async {
+  final db = await DatabaseHelper.instance.database;
+  final productos = await db.query('productos', orderBy: 'nombre ASC');
+
+  if (productos.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Primero crea un producto en Stock para registrar compras.')),
+      );
+    }
+    return false;
+  }
+
+  Map prodSel = productos.first;
+  final provCtrl = TextEditingController(text: prodSel['proveedor']?.toString() ?? '');
+  final cantCtrl = TextEditingController(text: '1');
+  final costoUnitCtrl = TextEditingController(
+    text: ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2).replaceAll('.', ','),
+  );
+  final totalCtrl = TextEditingController(text: costoUnitCtrl.text);
+  String metodoPago = 'Transferencia';
+  String fechaIso = DateTime.now().toIso8601String().split('T')[0];
+
+  double parseNum(String s) => double.tryParse(s.replaceAll(',', '.').trim()) ?? 0.0;
+
+  void recalcularTotal() {
+    final c = int.tryParse(cantCtrl.text.trim()) ?? 1;
+    final u = parseNum(costoUnitCtrl.text);
+    totalCtrl.text = (c * u).toStringAsFixed(2).replaceAll('.', ',');
+  }
+
+  if (!context.mounted) return false;
+
+  final resultado = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlg) => AlertDialog(
+        backgroundColor: _BusinessColors.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: _BusinessColors.border),
+        ),
+        title: const Text('Registrar Nueva Compra', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                value: prodSel['id'] as int,
+                isExpanded: true,
+                dropdownColor: _BusinessColors.surface,
+                decoration: const InputDecoration(labelText: 'Producto del Stock'),
+                items: productos
+                    .map((pr) => DropdownMenuItem<int>(
+                          value: pr['id'] as int,
+                          child: Text('${pr['nombre']} (Stock: ${pr['stock']})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                        ))
+                    .toList(),
+                onChanged: (id) {
+                  if (id == null) return;
+                  setDlg(() {
+                    prodSel = productos.firstWhere((e) => e['id'] == id);
+                    provCtrl.text = prodSel['proveedor']?.toString() ?? '';
+                    costoUnitCtrl.text = ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2).replaceAll('.', ',');
+                    recalcularTotal();
+                  });
+                },
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor')),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: cantCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Cantidad'),
+                      onChanged: (_) => setDlg(recalcularTotal),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: costoUnitCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Coste unit. (€)'),
+                      onChanged: (_) => setDlg(recalcularTotal),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: totalCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Total compra (€)'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: metodoPago,
+                      isExpanded: true,
+                      dropdownColor: _BusinessColors.surface,
+                      decoration: const InputDecoration(labelText: 'Método'),
+                      items: const [
+                        DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'Bizum', child: Text('Bizum', style: TextStyle(fontSize: 12))),
+                      ],
+                      onChanged: (v) => setDlg(() => metodoPago = v!),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () async {
+                  final inicial = DateTime.tryParse(fechaIso) ?? DateTime.now();
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: inicial,
+                    firstDate: DateTime(2024),
+                    lastDate: DateTime(2032),
+                  );
+                  if (picked != null) {
+                    setDlg(() => fechaIso = picked.toIso8601String().split('T')[0]);
+                  }
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: InputDecorator(
+                  decoration: const InputDecoration(labelText: 'Fecha de compra'),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(_fechaCortaEs(fechaIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
+                      const Icon(Icons.calendar_today_outlined, size: 16, color: _BusinessColors.textMuted),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _BusinessColors.primaryBlue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              final cant = int.tryParse(cantCtrl.text.trim()) ?? 1;
+              final unit = parseNum(costoUnitCtrl.text);
+              final total = parseNum(totalCtrl.text) > 0 ? parseNum(totalCtrl.text) : (cant * unit);
+              final prov = provCtrl.text.trim().isEmpty ? 'Proveedor General' : provCtrl.text.trim();
+
+              final stActual = (prodSel['stock'] as int?) ?? 0;
+              await db.update(
+                'productos',
+                {'stock': stActual + cant, 'costo_compra': unit > 0 ? unit : (prodSel['costo_compra'] ?? 0.0), 'proveedor': prov},
+                where: 'id = ?',
+                whereArgs: [prodSel['id']],
+              );
+
+              await db.insert('movimientos', {
+                'tipo': 'COMPRA',
+                'producto_id': prodSel['id'],
+                'producto_nombre': prodSel['nombre'],
+                'cliente_proveedor': prov,
+                'tarifa': 'Coste Proveedor',
+                'cantidad': cant,
+                'precio_unitario': cant > 0 ? total / cant : unit,
+                'importe': total,
+                'costo_total': total,
+                'metodo_pago': metodoPago,
+                'estado_cobro': 'Pagado',
+                'notas': '',
+                'fecha': fechaIso,
+                'fecha_vencimiento': fechaIso,
+              });
+
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            },
+            child: const Text('Guardar compra', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  return resultado == true;
 }
 
 class NuevaVentaScreen extends StatefulWidget {
@@ -919,9 +1330,9 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
-          backgroundColor: const Color(0xFF111824),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFF243247))),
-          title: const Text('Nuevo contacto', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          backgroundColor: _BusinessColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: _BusinessColors.border)),
+          title: const Text('Nuevo contacto', style: TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -929,7 +1340,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 value: tipoSel,
-                dropdownColor: const Color(0xFF162030),
+                dropdownColor: _BusinessColors.surface,
                 decoration: const InputDecoration(labelText: 'Tipo de contacto'),
                 items: const [
                   DropdownMenuItem(value: 'Cliente Final', child: Text('Cliente Final (PVP)')),
@@ -942,9 +1353,9 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Color(0xFF94A3B8)))),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: const Color(0xFF052E16)),
+              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
               onPressed: () async {
                 final nom = nombreCtrl.text.trim();
                 if (nom.isEmpty) return;
@@ -1082,19 +1493,19 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0F1A),
+      backgroundColor: _BusinessColors.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0F1A),
+        backgroundColor: _BusinessColors.bg,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: const Text('Nueva venta', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text('Nueva venta', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white70,
-                side: const BorderSide(color: Color(0xFF243247)),
+                foregroundColor: _BusinessColors.textMuted,
+                side: const BorderSide(color: _BusinessColors.border),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () => Navigator.pop(context, false),
@@ -1108,13 +1519,12 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
-                // Bloque Cliente y Fecha + Nuevo contacto
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111824),
+                    color: _BusinessColors.card,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF1E293B)),
+                    border: Border.all(color: _BusinessColors.border),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1125,12 +1535,12 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Cliente', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                                const Text('Cliente', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                                 const SizedBox(height: 6),
                                 DropdownButtonFormField<String>(
                                   value: clienteSeleccionado,
                                   isExpanded: true,
-                                  dropdownColor: const Color(0xFF162030),
+                                  dropdownColor: _BusinessColors.surface,
                                   items: opcionesCliente
                                       .map((nom) => DropdownMenuItem<String>(
                                             value: nom,
@@ -1152,7 +1562,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Fecha', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                                const Text('Fecha', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                                 const SizedBox(height: 6),
                                 InkWell(
                                   onTap: () => _elegirFecha(false),
@@ -1162,8 +1572,8 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text(_fechaCortaEs(fechaIso), style: const TextStyle(fontSize: 13, color: Colors.white)),
-                                        const Icon(Icons.keyboard_arrow_down, size: 18, color: Color(0xFF94A3B8)),
+                                        Text(_fechaCortaEs(fechaIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
+                                        const Icon(Icons.keyboard_arrow_down, size: 18, color: _BusinessColors.textMuted),
                                       ],
                                     ),
                                   ),
@@ -1176,9 +1586,9 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                       const SizedBox(height: 10),
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: const Color(0xFF162030),
-                          side: const BorderSide(color: Color(0xFF243247)),
+                          foregroundColor: _BusinessColors.textMain,
+                          backgroundColor: _BusinessColors.surface,
+                          side: const BorderSide(color: _BusinessColors.border),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         onPressed: _dialogoNuevoContacto,
@@ -1190,34 +1600,33 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
 
                 const SizedBox(height: 14),
 
-                // Bloque Líneas
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111824),
+                    color: _BusinessColors.card,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF1E293B)),
+                    border: Border.all(color: _BusinessColors.border),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Líneas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                      const Text('Líneas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
                       const SizedBox(height: 10),
                       if (productos.isEmpty)
                         const Padding(
                           padding: EdgeInsets.only(bottom: 10),
-                          child: Text('No hay productos creados. Ve a Stock para añadir productos.', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 12)),
+                          child: Text('No hay productos creados. Ve a Stock para añadir productos.', style: TextStyle(color: _BusinessColors.amberSoft, fontSize: 12)),
                         )
                       else ...[
                         const Row(
                           children: [
-                            Expanded(flex: 4, child: Text('Producto', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))),
+                            Expanded(flex: 4, child: Text('Producto', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
                             SizedBox(width: 6),
-                            Expanded(flex: 2, child: Text('Cant.', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))),
+                            Expanded(flex: 2, child: Text('Cant.', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
                             SizedBox(width: 6),
-                            Expanded(flex: 3, child: Text('Precio', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))),
+                            Expanded(flex: 3, child: Text('Precio', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
                             SizedBox(width: 6),
-                            Expanded(flex: 3, child: Text('Importe', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)))),
+                            Expanded(flex: 3, child: Text('Importe', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
                             SizedBox(width: 24),
                           ],
                         ),
@@ -1236,7 +1645,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                                   child: DropdownButtonFormField<int>(
                                     value: prodIdActual,
                                     isExpanded: true,
-                                    dropdownColor: const Color(0xFF162030),
+                                    dropdownColor: _BusinessColors.surface,
                                     items: productos
                                         .map((pItem) => DropdownMenuItem<int>(
                                               value: pItem['id'] as int,
@@ -1278,14 +1687,14 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                                   flex: 3,
                                   child: Text(
                                     _fmtEur(impL),
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
                                   ),
                                 ),
                                 SizedBox(
                                   width: 24,
                                   child: IconButton(
                                     padding: EdgeInsets.zero,
-                                    icon: const Icon(Icons.close, size: 16, color: Color(0xFF94A3B8)),
+                                    icon: const Icon(Icons.close, size: 16, color: _BusinessColors.textMuted),
                                     onPressed: () {
                                       setState(() {
                                         l.dispose();
@@ -1302,9 +1711,9 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                       const SizedBox(height: 4),
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: const Color(0xFF162030),
-                          side: const BorderSide(color: Color(0xFF243247)),
+                          foregroundColor: _BusinessColors.textMain,
+                          backgroundColor: _BusinessColors.surface,
+                          side: const BorderSide(color: _BusinessColors.border),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         onPressed: _anadirLinea,
@@ -1316,13 +1725,12 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
 
                 const SizedBox(height: 14),
 
-                // Bloque Descuento, IVA, Método, Cobrado en el acto, Notas y Totales
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111824),
+                    color: _BusinessColors.card,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF1E293B)),
+                    border: Border.all(color: _BusinessColors.border),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1333,7 +1741,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Descuento (€)', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                                const Text('Descuento (€)', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                                 const SizedBox(height: 6),
                                 TextField(
                                   controller: descuentoCtrl,
@@ -1348,7 +1756,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('IVA %', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                                const Text('IVA %', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                                 const SizedBox(height: 6),
                                 TextField(
                                   controller: ivaCtrl,
@@ -1363,12 +1771,12 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Método', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                                const Text('Método', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                                 const SizedBox(height: 6),
                                 DropdownButtonFormField<String>(
                                   value: metodoPago,
                                   isExpanded: true,
-                                  dropdownColor: const Color(0xFF162030),
+                                  dropdownColor: _BusinessColors.surface,
                                   items: const [
                                     DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo', style: TextStyle(fontSize: 12))),
                                     DropdownMenuItem(value: 'Bizum', child: Text('Bizum', style: TextStyle(fontSize: 12))),
@@ -1388,16 +1796,16 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                         children: [
                           Checkbox(
                             value: cobradoEnElActo,
-                            activeColor: const Color(0xFF3B82F6),
+                            activeColor: _BusinessColors.primaryBlue,
                             onChanged: (v) => setState(() => cobradoEnElActo = v ?? true),
                           ),
-                          const Text('Cobrado en el acto', style: TextStyle(fontSize: 13, color: Colors.white)),
+                          const Text('Cobrado en el acto', style: TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
                         ],
                       ),
 
                       if (!cobradoEnElActo) ...[
                         const SizedBox(height: 6),
-                        const Text('Fecha de vencimiento', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                        const Text('Fecha de vencimiento', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                         const SizedBox(height: 6),
                         InkWell(
                           onTap: () => _elegirFecha(true),
@@ -1407,8 +1815,8 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(_fechaCortaEs(fechaVencIso), style: const TextStyle(fontSize: 13, color: Colors.white)),
-                                const Icon(Icons.keyboard_arrow_down, size: 18, color: Color(0xFF94A3B8)),
+                                Text(_fechaCortaEs(fechaVencIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
+                                const Icon(Icons.keyboard_arrow_down, size: 18, color: _BusinessColors.textMuted),
                               ],
                             ),
                           ),
@@ -1416,7 +1824,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                       ],
 
                       const SizedBox(height: 10),
-                      const Text('Notas', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                      const Text('Notas', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                       const SizedBox(height: 6),
                       TextField(
                         controller: notasCtrl,
@@ -1425,38 +1833,38 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                       ),
 
                       const SizedBox(height: 16),
-                      const Divider(color: Color(0xFF1E293B)),
+                      const Divider(color: _BusinessColors.border),
                       const SizedBox(height: 8),
 
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Subtotal', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
-                          Text(_fmtEur(_baseImponible), style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          const Text('Subtotal', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
+                          Text(_fmtEur(_baseImponible), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
                         ],
                       ),
                       const SizedBox(height: 6),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('IVA ${_ivaPct.toStringAsFixed(0)}%', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
-                          Text(_fmtEur(_importeIva), style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          Text('IVA ${_ivaPct.toStringAsFixed(0)}%', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
+                          Text(_fmtEur(_importeIva), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Total', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                          Text(_fmtEur(_totalFinal), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                          const Text('Total', style: TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
+                          Text(_fmtEur(_totalFinal), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Margen estimado', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                          Text(_fmtEur(_margenEstimado), style: const TextStyle(color: Color(0xFF22C55E), fontSize: 12, fontWeight: FontWeight.w600)),
+                          const Text('Margen estimado', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+                          Text(_fmtEur(_margenEstimado), style: const TextStyle(color: _BusinessColors.emeraldBright, fontSize: 12, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ],
@@ -1469,8 +1877,8 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF22C55E),
-                      foregroundColor: const Color(0xFF052E16),
+                      backgroundColor: _BusinessColors.emerald,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
@@ -1521,15 +1929,15 @@ class _VentasScreenState extends State<VentasScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0F1A),
+      backgroundColor: _BusinessColors.bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0F1A),
-        title: const Text('Ventas & Cobros', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: _BusinessColors.bg,
+        title: const Text('Ventas & Cobros', style: TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: const Color(0xFF052E16)),
+              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.emerald, foregroundColor: Colors.white),
               onPressed: () async {
                 await widget.onNuevaVenta();
                 _cargar();
@@ -1545,18 +1953,18 @@ class _VentasScreenState extends State<VentasScreen> {
           Container(
             margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF243247))),
+            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: _BusinessColors.border)),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Total registrado', style: TextStyle(color: Color(0xFF94A3B8))),
-                Text(_fmtEur(totalVentas), style: const TextStyle(color: Color(0xFF22C55E), fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text('Total registrado', style: TextStyle(color: _BusinessColors.textMuted)),
+                Text(_fmtEur(totalVentas), style: const TextStyle(color: _BusinessColors.emeraldBright, fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
           Expanded(
             child: ventas.isEmpty
-                ? const Center(child: Text('Aún no hay ventas registradas.', style: TextStyle(color: Color(0xFF94A3B8))))
+                ? const Center(child: Text('Aún no hay ventas registradas.', style: TextStyle(color: _BusinessColors.textMuted)))
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: ventas.length,
@@ -1566,19 +1974,19 @@ class _VentasScreenState extends State<VentasScreen> {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF243247))),
+                        decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
                         child: Row(
                           children: [
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('${v['cliente_proveedor']} · ${v['producto_nombre']} (x${v['cantidad'] ?? 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                                  Text('${_fechaCortaEs(v['fecha'].toString())} · ${v['metodo_pago']} · ${pend ? 'Pendiente' : 'Pagado'}', style: TextStyle(color: pend ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8), fontSize: 12)),
+                                  Text('${v['cliente_proveedor']} · ${v['producto_nombre']} (x${v['cantidad'] ?? 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+                                  Text('${_fechaCortaEs(v['fecha'].toString())} · ${v['metodo_pago']} · ${pend ? 'Pendiente' : 'Pagado'}', style: TextStyle(color: pend ? _BusinessColors.amberSoft : _BusinessColors.textMuted, fontSize: 12)),
                                 ],
                               ),
                             ),
-                            Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                            Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 14)),
                           ],
                         ),
                       );
@@ -1593,9 +2001,15 @@ class _VentasScreenState extends State<VentasScreen> {
 
 class StockScreen extends StatefulWidget {
   final VoidCallback onChanged;
+  final Future<void> Function() onNuevaCompra;
   final bool soloStockBajoInicial;
 
-  const StockScreen({super.key, required this.onChanged, this.soloStockBajoInicial = false});
+  const StockScreen({
+    super.key,
+    required this.onChanged,
+    required this.onNuevaCompra,
+    this.soloStockBajoInicial = false,
+  });
 
   @override
   State<StockScreen> createState() => _StockScreenState();
@@ -1630,9 +2044,9 @@ class _StockScreenState extends State<StockScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF111824),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Color(0xFF243247))),
-        title: Text(prod == null ? 'Nuevo producto' : 'Editar producto', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        backgroundColor: _BusinessColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
+        title: Text(prod == null ? 'Nuevo producto' : 'Editar producto', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1660,9 +2074,9 @@ class _StockScreenState extends State<StockScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Color(0xFF94A3B8)))),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: const Color(0xFF052E16)),
+            style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
             onPressed: () async {
               final nom = nombreCtrl.text.trim();
               if (nom.isEmpty) return;
@@ -1701,9 +2115,9 @@ class _StockScreenState extends State<StockScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
-          backgroundColor: const Color(0xFF111824),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: Color(0xFF243247))),
-          title: Text('Ajustar stock · ${prod['nombre']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+          backgroundColor: _BusinessColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
+          title: Text('Ajustar stock · ${prod['nombre']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1713,7 +2127,7 @@ class _StockScreenState extends State<StockScreen> {
                     child: ChoiceChip(
                       label: const Text('+ Entrada / Compra'),
                       selected: esEntrada,
-                      selectedColor: const Color(0xFF22C55E),
+                      selectedColor: _BusinessColors.emerald,
                       onSelected: (_) => setDlg(() => esEntrada = true),
                     ),
                   ),
@@ -1722,7 +2136,7 @@ class _StockScreenState extends State<StockScreen> {
                     child: ChoiceChip(
                       label: const Text('- Salida / Ajuste'),
                       selected: !esEntrada,
-                      selectedColor: const Color(0xFFEF4444),
+                      selectedColor: _BusinessColors.danger,
                       onSelected: (_) => setDlg(() => esEntrada = false),
                     ),
                   ),
@@ -1737,9 +2151,9 @@ class _StockScreenState extends State<StockScreen> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: Color(0xFF94A3B8)))),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: const Color(0xFF052E16)),
+              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
               onPressed: () async {
                 final uds = int.tryParse(cantCtrl.text.trim()) ?? 0;
                 if (uds <= 0) return;
@@ -1762,6 +2176,7 @@ class _StockScreenState extends State<StockScreen> {
                     'costo_total': uds * costoU,
                     'metodo_pago': 'Transferencia',
                     'estado_cobro': 'Pagado',
+                    'notas': '',
                     'fecha': hoy,
                     'fecha_vencimiento': hoy,
                   });
@@ -1789,7 +2204,7 @@ class _StockScreenState extends State<StockScreen> {
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF111824),
+      backgroundColor: _BusinessColors.card,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(18),
@@ -1797,17 +2212,17 @@ class _StockScreenState extends State<StockScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Historial · ${prod['nombre']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+            Text('Historial · ${prod['nombre']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
             const SizedBox(height: 12),
             if (hist.isEmpty)
-              const Text('Sin movimientos registrados para este producto.', style: TextStyle(color: Color(0xFF94A3B8)))
+              const Text('Sin movimientos registrados para este producto.', style: TextStyle(color: _BusinessColors.textMuted))
             else
               ...hist.take(8).map((m) => ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    title: Text('${m['tipo']} · ${m['cliente_proveedor']} (x${m['cantidad'] ?? 1})', style: const TextStyle(color: Colors.white)),
-                    subtitle: Text('${_fechaCortaEs(m['fecha'].toString())} · ${m['estado_cobro']}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                    trailing: Text(_fmtEur((m['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF22C55E))),
+                    title: Text('${m['tipo']} · ${m['cliente_proveedor']} (x${m['cantidad'] ?? 1})', style: const TextStyle(color: _BusinessColors.textMain)),
+                    subtitle: Text('${_fechaCortaEs(m['fecha'].toString())} · ${m['estado_cobro']}', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 11)),
+                    trailing: Text(_fmtEur((m['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.emeraldBright)),
                   )),
           ],
         ),
@@ -1841,32 +2256,49 @@ class _StockScreenState extends State<StockScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Inventario y tarifas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF22C55E),
-                foregroundColor: const Color(0xFF052E16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () => _dialogoProducto(),
-              child: const Text('+ Producto', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Inventario y tarifas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+            Row(
+              children: [
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _BusinessColors.softBlue,
+                    side: const BorderSide(color: _BusinessColors.border),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    await widget.onNuevaCompra();
+                    _cargar();
+                    widget.onChanged();
+                  },
+                  child: const Text('+ Compra', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _BusinessColors.primaryBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => _dialogoProducto(),
+                  child: const Text('+ Producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+              ],
             ),
           ],
         ),
         const SizedBox(height: 12),
 
-        // KPIs Stock
         Row(
           children: [
-            Expanded(child: _miniKpiStock('Productos', '${todosProductos.length}', Colors.white, () => setState(() => soloBajo = false))),
+            Expanded(child: _miniKpiStock('Productos', '${todosProductos.length}', _BusinessColors.textMain, () => setState(() => soloBajo = false))),
             const SizedBox(width: 10),
-            Expanded(child: _miniKpiStock('Valor inventario', _fmtEur(valTotal), Colors.white, () => setState(() => soloBajo = false))),
+            Expanded(child: _miniKpiStock('Valor inventario', _fmtEur(valTotal), _BusinessColors.textMain, () => setState(() => soloBajo = false))),
           ],
         ),
         const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: _miniKpiStock('Stock bajo', '$bajos', const Color(0xFFEF4444), () => setState(() => soloBajo = !soloBajo))),
+            Expanded(child: _miniKpiStock('Stock bajo', '$bajos', _BusinessColors.danger, () => setState(() => soloBajo = !soloBajo))),
             const Expanded(child: SizedBox()),
           ],
         ),
@@ -1874,16 +2306,16 @@ class _StockScreenState extends State<StockScreen> {
         const SizedBox(height: 12),
         TextField(
           onChanged: (v) => setState(() => busqueda = v),
-          decoration: const InputDecoration(hintText: 'Buscar producto o referencia...', prefixIcon: Icon(Icons.search, color: Color(0xFF94A3B8))),
+          decoration: const InputDecoration(hintText: 'Buscar producto o referencia...', prefixIcon: Icon(Icons.search, color: _BusinessColors.textMuted)),
         ),
         const SizedBox(height: 12),
 
         if (filtrados.isEmpty)
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12)),
             alignment: Alignment.center,
-            child: const Text('No hay productos para mostrar.', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text('No hay productos para mostrar.', style: TextStyle(color: _BusinessColors.textMuted)),
           )
         else
           ...filtrados.map((pr) {
@@ -1898,9 +2330,9 @@ class _StockScreenState extends State<StockScreen> {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFF111824),
+                color: _BusinessColors.card,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFF243247)),
+                border: Border.all(color: _BusinessColors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1908,16 +2340,16 @@ class _StockScreenState extends State<StockScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(child: Text(pr['nombre'], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white))),
+                      Expanded(child: Text(pr['nombre'], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain))),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: esBajo ? const Color(0xFF3F161A) : const Color(0xFF113322),
+                          color: esBajo ? const Color(0xFF3A161B) : const Color(0xFF102E24),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           '$st uds',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: esBajo ? const Color(0xFFF87171) : const Color(0xFF22C55E)),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: esBajo ? const Color(0xFFF87171) : _BusinessColors.emeraldBright),
                         ),
                       ),
                     ],
@@ -1925,7 +2357,7 @@ class _StockScreenState extends State<StockScreen> {
                   const SizedBox(height: 6),
                   Text(
                     'Coste ${_fmtEur(coste)} · PVP ${_fmtEur(pvp)} · Colab. ${_fmtEur(colab)} · margen ${margenPct.toStringAsFixed(1).replaceAll('.', ',')} %',
-                    style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                    style: const TextStyle(fontSize: 12, color: _BusinessColors.textMuted),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -1937,7 +2369,7 @@ class _StockScreenState extends State<StockScreen> {
                       _btnAccionStock('Editar', () => _dialogoProducto(pr)),
                       const Spacer(),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Color(0xFF94A3B8), size: 20),
+                        icon: const Icon(Icons.delete_outline, color: _BusinessColors.textMuted, size: 20),
                         onPressed: () async {
                           final db = await DatabaseHelper.instance.database;
                           await db.delete('productos', where: 'id = ?', whereArgs: [pr['id']]);
@@ -1961,11 +2393,11 @@ class _StockScreenState extends State<StockScreen> {
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF243247))),
+        decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(titulo, style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+            Text(titulo, style: const TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
             const SizedBox(height: 6),
             Text(valor, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorValor)),
           ],
@@ -1977,9 +2409,9 @@ class _StockScreenState extends State<StockScreen> {
   Widget _btnAccionStock(String texto, VoidCallback onTap) {
     return OutlinedButton(
       style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        backgroundColor: const Color(0xFF162030),
-        side: const BorderSide(color: Color(0xFF243247)),
+        foregroundColor: _BusinessColors.textMain,
+        backgroundColor: _BusinessColors.surface,
+        side: const BorderSide(color: _BusinessColors.border),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
       ),
@@ -2042,9 +2474,9 @@ class _CobrosScreenState extends State<CobrosScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Cobros pendientes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text('Cobros pendientes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: const Color(0xFF052E16)),
+              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.emerald, foregroundColor: Colors.white),
               onPressed: () async {
                 await widget.onNuevaVenta();
                 _cargar();
@@ -2063,9 +2495,9 @@ class _CobrosScreenState extends State<CobrosScreen> {
               child: ChoiceChip(
                 label: Text(t),
                 selected: sel,
-                selectedColor: const Color(0xFF22C55E),
-                backgroundColor: const Color(0xFF111824),
-                labelStyle: TextStyle(color: sel ? const Color(0xFF052E16) : Colors.white, fontWeight: FontWeight.bold),
+                selectedColor: _BusinessColors.primaryBlue,
+                backgroundColor: _BusinessColors.card,
+                labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMain, fontWeight: FontWeight.bold),
                 onSelected: (_) => setState(() => tabActiva = t),
               ),
             );
@@ -2077,13 +2509,13 @@ class _CobrosScreenState extends State<CobrosScreen> {
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF243247))),
+                decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total pendiente', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                    const Text('Total pendiente', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                     const SizedBox(height: 6),
-                    Text(_fmtEur(tabActiva == 'Me deben' ? totalPend : 0.0), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.white)),
+                    Text(_fmtEur(tabActiva == 'Me deben' ? totalPend : 0.0), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
                   ],
                 ),
               ),
@@ -2092,13 +2524,13 @@ class _CobrosScreenState extends State<CobrosScreen> {
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF243247))),
+                decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Vencido', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                    const Text('Vencido', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                     const SizedBox(height: 6),
-                    Text(_fmtEur(tabActiva == 'Me deben' ? totalVenc : 0.0), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+                    Text(_fmtEur(tabActiva == 'Me deben' ? totalVenc : 0.0), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: _BusinessColors.danger)),
                   ],
                 ),
               ),
@@ -2109,9 +2541,9 @@ class _CobrosScreenState extends State<CobrosScreen> {
         if (tabActiva == 'Debo' || pendientes.isEmpty)
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12)),
             alignment: Alignment.center,
-            child: const Text('No hay saldos pendientes en esta pestaña.', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text('No hay saldos pendientes en esta pestaña.', style: TextStyle(color: _BusinessColors.textMuted)),
           )
         else
           ...pendientes.map((c) {
@@ -2125,24 +2557,24 @@ class _CobrosScreenState extends State<CobrosScreen> {
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF243247))),
+              decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: _BusinessColors.border)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(c['cliente_proveedor'], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
-                      Text(_fmtEur(imp), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text(c['cliente_proveedor'], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+                      Text(_fmtEur(imp), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text('${c['producto_nombre']} · $estadoTexto', style: TextStyle(fontSize: 12, color: atraso > 0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8))),
+                  Text('${c['producto_nombre']} · $estadoTexto', style: TextStyle(fontSize: 12, color: atraso > 0 ? _BusinessColors.amberSoft : _BusinessColors.textMuted)),
                   const SizedBox(height: 12),
                   Row(
                     children: [
                       ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF22C55E), foregroundColor: const Color(0xFF052E16)),
+                        style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.emerald, foregroundColor: Colors.white),
                         onPressed: () async {
                           final db = await DatabaseHelper.instance.database;
                           await db.update('movimientos', {'tipo': 'VENTA', 'estado_cobro': 'Pagado'}, where: 'id = ?', whereArgs: [c['id']]);
@@ -2153,7 +2585,7 @@ class _CobrosScreenState extends State<CobrosScreen> {
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton(
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.white, backgroundColor: const Color(0xFF162030), side: const BorderSide(color: Color(0xFF243247))),
+                        style: OutlinedButton.styleFrom(foregroundColor: _BusinessColors.textMain, backgroundColor: _BusinessColors.surface, side: const BorderSide(color: _BusinessColors.border)),
                         onPressed: () async {
                           final msg = 'Hola ${c['cliente_proveedor']}, te recordamos el cobro pendiente de ${_fmtEur(imp)} por ${c['producto_nombre']}.';
                           await Clipboard.setData(ClipboardData(text: msg));
@@ -2176,9 +2608,17 @@ class _CobrosScreenState extends State<CobrosScreen> {
 
 class KardexScreen extends StatefulWidget {
   final VoidCallback onChanged;
+  final Future<void> Function() onNuevaVenta;
+  final Future<void> Function() onNuevaCompra;
   final String filtroInicial;
 
-  const KardexScreen({super.key, required this.onChanged, this.filtroInicial = 'TODOS'});
+  const KardexScreen({
+    super.key,
+    required this.onChanged,
+    required this.onNuevaVenta,
+    required this.onNuevaCompra,
+    this.filtroInicial = 'TODOS',
+  });
 
   @override
   State<KardexScreen> createState() => _KardexScreenState();
@@ -2216,8 +2656,28 @@ class _KardexScreenState extends State<KardexScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('Kardex de movimientos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            children: [
+              const Text('Kardex de movimientos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () async {
+                      await widget.onNuevaVenta();
+                      _cargar();
+                      widget.onChanged();
+                    },
+                    child: const Text('+ Venta', style: TextStyle(color: _BusinessColors.emeraldBright, fontWeight: FontWeight.bold)),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      await widget.onNuevaCompra();
+                      _cargar();
+                      widget.onChanged();
+                    },
+                    child: const Text('+ Compra', style: TextStyle(color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -2232,9 +2692,9 @@ class _KardexScreenState extends State<KardexScreen> {
                 child: ChoiceChip(
                   label: Text(f),
                   selected: sel,
-                  selectedColor: const Color(0xFF2F81F7),
-                  backgroundColor: const Color(0xFF111824),
-                  labelStyle: TextStyle(color: sel ? Colors.white : const Color(0xFF94A3B8), fontWeight: FontWeight.bold, fontSize: 12),
+                  selectedColor: _BusinessColors.primaryBlue,
+                  backgroundColor: _BusinessColors.card,
+                  labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12),
                   onSelected: (_) {
                     setState(() => filtro = f);
                     _cargar();
@@ -2246,7 +2706,7 @@ class _KardexScreenState extends State<KardexScreen> {
         ),
         Expanded(
           child: movs.isEmpty
-              ? const Center(child: Text('Sin movimientos registrados.', style: TextStyle(color: Color(0xFF94A3B8))))
+              ? const Center(child: Text('Sin movimientos registrados.', style: TextStyle(color: _BusinessColors.textMuted)))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
                   itemCount: movs.length,
@@ -2256,21 +2716,21 @@ class _KardexScreenState extends State<KardexScreen> {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF243247))),
+                      decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
                       child: Row(
                         children: [
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${m['cliente_proveedor']} · ${m['producto_nombre']} (x${m['cantidad'] ?? 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13)),
-                                Text('${m['tipo']} · ${_fechaCortaEs(m['fecha'].toString())} · ${m['estado_cobro']}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                                Text('${m['cliente_proveedor']} · ${m['producto_nombre']} (x${m['cantidad'] ?? 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
+                                Text('${m['tipo']} · ${_fechaCortaEs(m['fecha'].toString())} · ${m['estado_cobro']}', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 11)),
                               ],
                             ),
                           ),
                           Text(
                             '${esCompra ? '-' : '+'}${_fmtEur((m['importe'] as num).toDouble())}',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: esCompra ? const Color(0xFFEF4444) : const Color(0xFF22C55E), fontSize: 14),
+                            style: TextStyle(fontWeight: FontWeight.bold, color: esCompra ? _BusinessColors.amberSoft : _BusinessColors.emeraldBright, fontSize: 14),
                           ),
                         ],
                       ),
@@ -2311,16 +2771,16 @@ class _ClientesScreenState extends State<ClientesScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        const Text('Clientes y colaboradores', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        const Text('Clientes y colaboradores', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
         const SizedBox(height: 6),
-        const Text('Se añaden solos al crear contactos o registrar ventas.', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+        const Text('Se añaden solos al crear contactos o registrar ventas.', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
         const SizedBox(height: 14),
         if (clientes.isEmpty)
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12)),
             alignment: Alignment.center,
-            child: const Text('Aún no hay contactos guardados.', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text('Aún no hay contactos guardados.', style: TextStyle(color: _BusinessColors.textMuted)),
           )
         else
           ...clientes.map((c) {
@@ -2328,20 +2788,20 @@ class _ClientesScreenState extends State<ClientesScreen> {
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: const Color(0xFF111824), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF243247))),
+              decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: const Color(0xFF162030),
-                    child: Icon(Icons.person, color: esColab ? const Color(0xFFEC4899) : const Color(0xFF60A5FA)),
+                    backgroundColor: _BusinessColors.surface,
+                    child: Icon(Icons.person, color: esColab ? _BusinessColors.amberSoft : _BusinessColors.softBlue),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
-                        Text('${c['tipo']}${c['telefono'] != null && c['telefono'].toString().isNotEmpty ? ' · ${c['telefono']}' : ''}', style: TextStyle(color: esColab ? const Color(0xFFEC4899) : const Color(0xFF22C55E), fontSize: 12)),
+                        Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 14)),
+                        Text('${c['tipo']}${c['telefono'] != null && c['telefono'].toString().isNotEmpty ? ' · ${c['telefono']}' : ''}', style: TextStyle(color: esColab ? _BusinessColors.amberSoft : _BusinessColors.emeraldBright, fontSize: 12)),
                       ],
                     ),
                   ),
