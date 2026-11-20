@@ -20,6 +20,7 @@ class _BusinessColors {
   static const emeraldBright = Color(0xFF34D399);
   static const amber = Color(0xFFD97706);
   static const amberSoft = Color(0xFFF59E0B);
+  static const purpleSoft = Color(0xFFA78BFA);
   static const danger = Color(0xFFEF4444);
   static const textMain = Color(0xFFF1F5F9);
   static const textMuted = Color(0xFF94A3B8);
@@ -80,7 +81,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('erp_juan_v5.db');
+    _database = await _initDB('erp_juan_v6.db');
     return _database!;
   }
 
@@ -112,7 +113,8 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL UNIQUE,
         tipo TEXT NOT NULL DEFAULT 'Cliente Final',
-        telefono TEXT DEFAULT ''
+        telefono TEXT DEFAULT '',
+        notas TEXT DEFAULT ''
       )
     ''');
 
@@ -137,9 +139,9 @@ class DatabaseHelper {
     ''');
   }
 
-  Future<void> asegurarContacto(String nombre, String tipo) async {
+  Future<void> asegurarContacto(String nombre, String tipo, {String telefono = '', String notas = ''}) async {
     final limpio = nombre.trim();
-    if (limpio.isEmpty || limpio == 'Cliente General') return;
+    if (limpio.isEmpty || limpio == 'Cliente General' || limpio == 'Proveedor General') return;
     final db = await database;
     final existe = await db.query(
       'clientes',
@@ -150,7 +152,8 @@ class DatabaseHelper {
       await db.insert('clientes', {
         'nombre': limpio,
         'tipo': tipo,
-        'telefono': '',
+        'telefono': telefono,
+        'notas': notas,
       });
     }
   }
@@ -364,8 +367,8 @@ class _MainShellState extends State<MainShell> {
             ),
             ListTile(
               leading: const Icon(Icons.people_alt_outlined, color: _BusinessColors.emeraldBright),
-              title: const Text('Clientes & Colaboradores', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Base de datos autorrellenable y tarifas', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+              title: const Text('Clientes, Colaboradores y Proveedores', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Agenda comercial y tarifas asignadas', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
               onTap: () {
                 Navigator.pop(ctx);
                 _irAPestana(5);
@@ -1014,9 +1017,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
+Future mostrarDialogoContacto(BuildContext context, {Map? contactoExistente, String tipoPorDefecto = 'Cliente Final'}) async {
+  final nombreCtrl = TextEditingController(text: contactoExistente?['nombre']?.toString() ?? '');
+  final telCtrl = TextEditingController(text: contactoExistente?['telefono']?.toString() ?? '');
+  final notasCtrl = TextEditingController(text: contactoExistente?['notas']?.toString() ?? '');
+  String tipoSel = contactoExistente?['tipo']?.toString() ?? tipoPorDefecto;
+  if (!['Cliente Final', 'Colaborador', 'Proveedor'].contains(tipoSel)) {
+    tipoSel = 'Cliente Final';
+  }
+
+  return await showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlg) => AlertDialog(
+        backgroundColor: _BusinessColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
+        title: Text(
+          contactoExistente == null ? 'Agregar contacto' : 'Editar contacto',
+          style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre o empresa')),
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: tipoSel,
+                dropdownColor: _BusinessColors.surface,
+                decoration: const InputDecoration(labelText: 'Categoría'),
+                items: const [
+                  DropdownMenuItem(value: 'Cliente Final', child: Text('Cliente (Tarifa PVP)')),
+                  DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador (Tarifa Especial)')),
+                  DropdownMenuItem(value: 'Proveedor', child: Text('Proveedor (Compras / Stock)')),
+                ],
+                onChanged: (v) => setDlg(() => tipoSel = v!),
+              ),
+              const SizedBox(height: 10),
+              TextField(controller: telCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Teléfono / WhatsApp')),
+              const SizedBox(height: 10),
+              TextField(controller: notasCtrl, decoration: const InputDecoration(labelText: 'Notas / Dirección / Referencia')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
+            onPressed: () async {
+              final nom = nombreCtrl.text.trim();
+              if (nom.isEmpty) return;
+              final db = await DatabaseHelper.instance.database;
+              final data = {
+                'nombre': nom,
+                'tipo': tipoSel,
+                'telefono': telCtrl.text.trim(),
+                'notas': notasCtrl.text.trim(),
+              };
+              if (contactoExistente == null) {
+                await db.insert('clientes', data, conflictAlgorithm: ConflictAlgorithm.replace);
+              } else {
+                await db.update('clientes', data, where: 'id = ?', whereArgs: [contactoExistente['id']]);
+              }
+              if (ctx.mounted) Navigator.pop(ctx, data);
+            },
+            child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 Future<bool> mostrarDialogoCompra(BuildContext context) async {
   final db = await DatabaseHelper.instance.database;
   final productos = await db.query('productos', orderBy: 'nombre ASC');
+  final proveedoresDb = await db.query('clientes', where: "tipo = 'Proveedor'", orderBy: 'nombre ASC');
 
   if (productos.isEmpty) {
     if (context.mounted) {
@@ -1028,7 +1104,16 @@ Future<bool> mostrarDialogoCompra(BuildContext context) async {
   }
 
   Map prodSel = productos.first;
-  final provCtrl = TextEditingController(text: prodSel['proveedor']?.toString() ?? '');
+  List listaProvs = [
+    'Proveedor General',
+    ...proveedoresDb.map((e) => e['nombre'].toString()).where((n) => n != 'Proveedor General'),
+  ];
+  final provInicialProd = (prodSel['proveedor'] ?? '').toString().trim();
+  if (provInicialProd.isNotEmpty && !listaProvs.contains(provInicialProd)) {
+    listaProvs.add(provInicialProd);
+  }
+
+  String provSeleccionado = provInicialProd.isNotEmpty ? provInicialProd : 'Proveedor General';
   final cantCtrl = TextEditingController(text: '1');
   final costoUnitCtrl = TextEditingController(
     text: ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2).replaceAll('.', ','),
@@ -1060,6 +1145,7 @@ Future<bool> mostrarDialogoCompra(BuildContext context) async {
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               DropdownButtonFormField<int>(
                 value: prodSel['id'] as int,
@@ -1076,15 +1162,52 @@ Future<bool> mostrarDialogoCompra(BuildContext context) async {
                   if (id == null) return;
                   setDlg(() {
                     prodSel = productos.firstWhere((e) => e['id'] == id);
-                    provCtrl.text = prodSel['proveedor']?.toString() ?? '';
+                    final pv = (prodSel['proveedor'] ?? '').toString().trim();
+                    if (pv.isNotEmpty) {
+                      if (!listaProvs.contains(pv)) listaProvs.add(pv);
+                      provSeleccionado = pv;
+                    }
                     costoUnitCtrl.text = ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2).replaceAll('.', ',');
                     recalcularTotal();
                   });
                 },
               ),
               const SizedBox(height: 10),
-              TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor')),
-              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: provSeleccionado,
+                isExpanded: true,
+                dropdownColor: _BusinessColors.surface,
+                decoration: const InputDecoration(labelText: 'Proveedor'),
+                items: listaProvs
+                    .map((nom) => DropdownMenuItem<String>(
+                          value: nom,
+                          child: Text(nom, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                        ))
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setDlg(() => provSeleccionado = v);
+                },
+              ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                  icon: const Icon(Icons.add_business_outlined, size: 16, color: _BusinessColors.softBlue),
+                  label: const Text('+ Nuevo proveedor', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue)),
+                  onPressed: () async {
+                    final creado = await mostrarDialogoContacto(ctx, tipoPorDefecto: 'Proveedor');
+                    if (creado != null) {
+                      final nomNuevo = creado['nombre'].toString();
+                      setDlg(() {
+                        if (!listaProvs.contains(nomNuevo)) listaProvs.add(nomNuevo);
+                        provSeleccionado = nomNuevo;
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
@@ -1177,7 +1300,9 @@ Future<bool> mostrarDialogoCompra(BuildContext context) async {
               final cant = int.tryParse(cantCtrl.text.trim()) ?? 1;
               final unit = parseNum(costoUnitCtrl.text);
               final total = parseNum(totalCtrl.text) > 0 ? parseNum(totalCtrl.text) : (cant * unit);
-              final prov = provCtrl.text.trim().isEmpty ? 'Proveedor General' : provCtrl.text.trim();
+              final prov = provSeleccionado.trim().isEmpty ? 'Proveedor General' : provSeleccionado.trim();
+
+              await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
 
               final stActual = (prodSel['stock'] as int?) ?? 0;
               await db.update(
@@ -1282,7 +1407,11 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
   Future<void> _cargarDatos() async {
     final db = await DatabaseHelper.instance.database;
     final prods = await db.query('productos', orderBy: 'nombre ASC');
-    final clis = await db.query('clientes', orderBy: 'nombre ASC');
+    final clis = await db.query(
+      'clientes',
+      where: "tipo != 'Proveedor'",
+      orderBy: 'nombre ASC',
+    );
 
     setState(() {
       productos = prods;
@@ -1322,64 +1451,15 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
   }
 
   Future<void> _dialogoNuevoContacto() async {
-    final nombreCtrl = TextEditingController();
-    final telCtrl = TextEditingController();
-    String tipoSel = 'Cliente Final';
-
-    final creado = await showDialog<String>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          backgroundColor: _BusinessColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: _BusinessColors.border)),
-          title: const Text('Nuevo contacto', style: TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre o empresa')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: tipoSel,
-                dropdownColor: _BusinessColors.surface,
-                decoration: const InputDecoration(labelText: 'Tipo de contacto'),
-                items: const [
-                  DropdownMenuItem(value: 'Cliente Final', child: Text('Cliente Final (PVP)')),
-                  DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador (Tarifa Colab.)')),
-                ],
-                onChanged: (v) => setDlg(() => tipoSel = v!),
-              ),
-              const SizedBox(height: 10),
-              TextField(controller: telCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Teléfono / WhatsApp')),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
-              onPressed: () async {
-                final nom = nombreCtrl.text.trim();
-                if (nom.isEmpty) return;
-                final db = await DatabaseHelper.instance.database;
-                await db.insert(
-                  'clientes',
-                  {'nombre': nom, 'tipo': tipoSel, 'telefono': telCtrl.text.trim()},
-                  conflictAlgorithm: ConflictAlgorithm.replace,
-                );
-                if (ctx.mounted) Navigator.pop(ctx, nom);
-              },
-              child: const Text('Guardar contacto', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
-    );
-
+    final creado = await mostrarDialogoContacto(context, tipoPorDefecto: 'Cliente Final');
     if (creado != null) {
       await _cargarDatos();
-      setState(() {
-        clienteSeleccionado = creado;
-        _actualizarPreciosPorCliente();
-      });
+      if (creado['tipo'] != 'Proveedor') {
+        setState(() {
+          clienteSeleccionado = creado['nombre'].toString();
+          _actualizarPreciosPorCliente();
+        });
+      }
     }
   }
 
@@ -1486,7 +1566,10 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
   Widget build(BuildContext context) {
     final opcionesCliente = [
       'Cliente General',
-      ...clientes.map((c) => c['nombre'].toString()).where((n) => n != 'Cliente General'),
+      ...clientes.map((c) {
+        final nom = c['nombre'].toString();
+        return nom;
+      }).where((n) => n != 'Cliente General'),
     ];
     if (!opcionesCliente.contains(clienteSeleccionado)) {
       opcionesCliente.add(clienteSeleccionado);
@@ -1535,18 +1618,24 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Cliente', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
+                                const Text('Cliente / Colaborador', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
                                 const SizedBox(height: 6),
                                 DropdownButtonFormField<String>(
                                   value: clienteSeleccionado,
                                   isExpanded: true,
                                   dropdownColor: _BusinessColors.surface,
-                                  items: opcionesCliente
-                                      .map((nom) => DropdownMenuItem<String>(
-                                            value: nom,
-                                            child: Text(nom, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                                          ))
-                                      .toList(),
+                                  items: opcionesCliente.map((nom) {
+                                    final item = clientes.firstWhere((c) => c['nombre'] == nom, orElse: () => {});
+                                    final esCol = item['tipo']?.toString() == 'Colaborador';
+                                    return DropdownMenuItem<String>(
+                                      value: nom,
+                                      child: Text(
+                                        esCol ? '$nom (Colab.)' : nom,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13),
+                                      ),
+                                    );
+                                  }).toList(),
                                   onChanged: (val) {
                                     if (val != null) {
                                       setState(() => clienteSeleccionado = val);
@@ -2081,9 +2170,13 @@ class _StockScreenState extends State<StockScreen> {
               final nom = nombreCtrl.text.trim();
               if (nom.isEmpty) return;
               double pNum(TextEditingController c) => double.tryParse(c.text.replaceAll(',', '.').trim()) ?? 0.0;
+              final prov = provCtrl.text.trim();
+              if (prov.isNotEmpty) {
+                await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
+              }
               final data = {
                 'nombre': nom,
-                'proveedor': provCtrl.text.trim(),
+                'proveedor': prov,
                 'stock': int.tryParse(stockCtrl.text.trim()) ?? 0,
                 'costo_compra': pNum(costoCtrl),
                 'precio_pvp': pNum(pvpCtrl),
@@ -2164,11 +2257,13 @@ class _StockScreenState extends State<StockScreen> {
                 if (esEntrada) {
                   final costoU = (prod['costo_compra'] as num?)?.toDouble() ?? 0.0;
                   final hoy = DateTime.now().toIso8601String().split('T')[0];
+                  final prov = provCtrl.text.trim().isEmpty ? 'Proveedor General' : provCtrl.text.trim();
+                  await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
                   await db.insert('movimientos', {
                     'tipo': 'COMPRA',
                     'producto_id': prod['id'],
                     'producto_nombre': prod['nombre'],
-                    'cliente_proveedor': provCtrl.text.trim().isEmpty ? 'Proveedor General' : provCtrl.text.trim(),
+                    'cliente_proveedor': prov,
                     'tarifa': 'Coste',
                     'cantidad': uds,
                     'precio_unitario': costoU,
@@ -2752,7 +2847,9 @@ class ClientesScreen extends StatefulWidget {
 }
 
 class _ClientesScreenState extends State<ClientesScreen> {
-  List clientes = [];
+  List todosContactos = [];
+  String filtroTipo = 'Todos';
+  String busqueda = '';
 
   @override
   void initState() {
@@ -2763,37 +2860,160 @@ class _ClientesScreenState extends State<ClientesScreen> {
   Future<void> _cargar() async {
     final db = await DatabaseHelper.instance.database;
     final res = await db.query('clientes', orderBy: 'nombre ASC');
-    if (mounted) setState(() => clientes = res);
+    if (mounted) setState(() => todosContactos = res);
+  }
+
+  String _tipoPorDefectoSegunPestana() {
+    if (filtroTipo == 'Colaboradores') return 'Colaborador';
+    if (filtroTipo == 'Proveedores') return 'Proveedor';
+    return 'Cliente Final';
   }
 
   @override
   Widget build(BuildContext context) {
+    final cntClientes = todosContactos.where((c) => (c['tipo'] ?? 'Cliente Final') == 'Cliente Final').length;
+    final cntColab = todosContactos.where((c) => (c['tipo'] ?? '') == 'Colaborador').length;
+    final cntProv = todosContactos.where((c) => (c['tipo'] ?? '') == 'Proveedor').length;
+
+    final filtrados = todosContactos.where((c) {
+      final tipo = (c['tipo'] ?? 'Cliente Final').toString();
+      final nombre = (c['nombre'] ?? '').toString().toLowerCase();
+      final tel = (c['telefono'] ?? '').toString().toLowerCase();
+      final q = busqueda.toLowerCase().trim();
+
+      final pasaBusqueda = q.isEmpty || nombre.contains(q) || tel.contains(q);
+      if (!pasaBusqueda) return false;
+
+      if (filtroTipo == 'Clientes') return tipo == 'Cliente Final';
+      if (filtroTipo == 'Colaboradores') return tipo == 'Colaborador';
+      if (filtroTipo == 'Proveedores') return tipo == 'Proveedor';
+      return true;
+    }).toList();
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        const Text('Clientes y colaboradores', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-        const SizedBox(height: 6),
-        const Text('Se añaden solos al crear contactos o registrar ventas.', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Expanded(
+              child: Text(
+                'Agenda comercial',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
+              ),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _BusinessColors.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.person_add_alt_1_rounded, size: 17),
+              label: const Text('Agregar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              onPressed: () async {
+                final res = await mostrarDialogoContacto(context, tipoPorDefecto: _tipoPorDefectoSegunPestana());
+                if (res != null) {
+                  _cargar();
+                  widget.onChanged();
+                }
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Clientes, colaboradores con tarifa especial y proveedores.',
+          style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted),
+        ),
+        const SizedBox(height: 12),
+
+        // Pestañas Cliente / Colaborador / Proveedor
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _chipFiltro('Todos (${todosContactos.length})', 'Todos'),
+              const SizedBox(width: 8),
+              _chipFiltro('Clientes ($cntClientes)', 'Clientes'),
+              const SizedBox(width: 8),
+              _chipFiltro('Colaboradores ($cntColab)', 'Colaboradores'),
+              const SizedBox(width: 8),
+              _chipFiltro('Proveedores ($cntProv)', 'Proveedores'),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        TextField(
+          onChanged: (v) => setState(() => busqueda = v),
+          decoration: const InputDecoration(
+            hintText: 'Buscar por nombre o teléfono...',
+            prefixIcon: Icon(Icons.search, color: _BusinessColors.textMuted),
+          ),
+        ),
+
         const SizedBox(height: 14),
-        if (clientes.isEmpty)
+
+        if (filtrados.isEmpty)
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: _BusinessColors.card,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _BusinessColors.border),
+            ),
             alignment: Alignment.center,
-            child: const Text('Aún no hay contactos guardados.', style: TextStyle(color: _BusinessColors.textMuted)),
+            child: Column(
+              children: [
+                const Text('No hay registros en esta categoría.', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
+                const SizedBox(height: 10),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _BusinessColors.softBlue,
+                    side: const BorderSide(color: _BusinessColors.border),
+                  ),
+                  onPressed: () async {
+                    final res = await mostrarDialogoContacto(context, tipoPorDefecto: _tipoPorDefectoSegunPestana());
+                    if (res != null) {
+                      _cargar();
+                      widget.onChanged();
+                    }
+                  },
+                  child: const Text('+ Agregar nuevo'),
+                ),
+              ],
+            ),
           )
         else
-          ...clientes.map((c) {
-            final esColab = (c['tipo'] ?? '').toString().toLowerCase().contains('colab');
+          ...filtrados.map((c) {
+            final tipo = (c['tipo'] ?? 'Cliente Final').toString();
+            final esColab = tipo == 'Colaborador';
+            final esProv = tipo == 'Proveedor';
+
+            final Color colorRol = esProv
+                ? _BusinessColors.purpleSoft
+                : (esColab ? _BusinessColors.amberSoft : _BusinessColors.emeraldBright);
+            final IconData iconoRol = esProv
+                ? Icons.local_shipping_outlined
+                : (esColab ? Icons.handshake_outlined : Icons.person_outline_rounded);
+            final String etiquetaRol = esProv
+                ? 'Proveedor'
+                : (esColab ? 'Colaborador · Tarifa Especial' : 'Cliente · Tarifa PVP');
+
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: _BusinessColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _BusinessColors.border),
+              ),
               child: Row(
                 children: [
                   CircleAvatar(
                     backgroundColor: _BusinessColors.surface,
-                    child: Icon(Icons.person, color: esColab ? _BusinessColors.amberSoft : _BusinessColors.softBlue),
+                    child: Icon(iconoRol, color: colorRol, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2801,15 +3021,62 @@ class _ClientesScreenState extends State<ClientesScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 14)),
-                        Text('${c['tipo']}${c['telefono'] != null && c['telefono'].toString().isNotEmpty ? ' · ${c['telefono']}' : ''}', style: TextStyle(color: esColab ? _BusinessColors.amberSoft : _BusinessColors.emeraldBright, fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Text(etiquetaRol, style: TextStyle(color: colorRol, fontSize: 12, fontWeight: FontWeight.w500)),
+                        if ((c['telefono'] ?? '').toString().isNotEmpty || (c['notas'] ?? '').toString().isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            [
+                              if ((c['telefono'] ?? '').toString().isNotEmpty) c['telefono'].toString(),
+                              if ((c['notas'] ?? '').toString().isNotEmpty) c['notas'].toString(),
+                            ].join(' · '),
+                            style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 11),
+                          ),
+                        ],
                       ],
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, color: _BusinessColors.textMuted, size: 19),
+                    onPressed: () async {
+                      final editado = await mostrarDialogoContacto(context, contactoExistente: c);
+                      if (editado != null) {
+                        _cargar();
+                        widget.onChanged();
+                      }
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: _BusinessColors.textMuted, size: 19),
+                    onPressed: () async {
+                      final db = await DatabaseHelper.instance.database;
+                      await db.delete('clientes', where: 'id = ?', whereArgs: [c['id']]);
+                      _cargar();
+                      widget.onChanged();
+                    },
                   ),
                 ],
               ),
             );
           }),
       ],
+    );
+  }
+
+  Widget _chipFiltro(String etiqueta, String valor) {
+    final sel = filtroTipo == valor;
+    return ChoiceChip(
+      label: Text(etiqueta),
+      selected: sel,
+      selectedColor: _BusinessColors.primaryBlue,
+      backgroundColor: _BusinessColors.card,
+      side: BorderSide(color: sel ? _BusinessColors.primaryBlue : _BusinessColors.border),
+      labelStyle: TextStyle(
+        color: sel ? Colors.white : _BusinessColors.textMuted,
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+      onSelected: (_) => setState(() => filtroTipo = valor),
     );
   }
 }
