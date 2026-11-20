@@ -32,7 +32,7 @@ class ERPJuanApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ERP Juan',
+      title: 'ERP Juan v1.2',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
@@ -90,9 +90,33 @@ class DatabaseHelper {
     final path = p.join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+      onOpen: (db) async {
+        await _asegurarEsquema(db);
+      },
     );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    await _asegurarEsquema(db);
+  }
+
+  Future<void> _asegurarEsquema(Database db) async {
+    await _createDB(db, 2);
+    final colsClientes = ["tipo TEXT NOT NULL DEFAULT 'Cliente Final'", "telefono TEXT DEFAULT ''", "notas TEXT DEFAULT ''"];
+    for (final col in colsClientes) {
+      try {
+        await db.execute('ALTER TABLE clientes ADD COLUMN $col');
+      } catch (_) {}
+    }
+    final colsProductos = ["proveedor TEXT DEFAULT ''", "precio_colaborador REAL NOT NULL DEFAULT 0.0"];
+    for (final col in colsProductos) {
+      try {
+        await db.execute('ALTER TABLE productos ADD COLUMN $col');
+      } catch (_) {}
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -316,7 +340,7 @@ class _MainShellState extends State<MainShell> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Acciones & Módulos ERP Juan', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+            const Text('Acciones & Módulos ERP Juan v1.2', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -618,7 +642,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _exportarResumen() async {
     final sb = StringBuffer();
-    sb.writeln('ERP JUAN — Panel ($periodo)');
+    sb.writeln('ERP JUAN v1.2 — Panel ($periodo)');
     sb.writeln('Ingresos: ${_fmtEur(ingresos)}');
     sb.writeln('Por cobrar: ${_fmtEur(porCobrar)} ($vencidasCount vencidas)');
     sb.writeln('Compras: ${_fmtEur(comprasPeriodo)} ($comprasCount órdenes)');
@@ -675,7 +699,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(color: _BusinessColors.primaryBlue.withOpacity(0.45)),
                           ),
-                          child: const Text('BUSINESS UI', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _BusinessColors.softBlue)),
+                          child: const Text('v1.2', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _BusinessColors.softBlue)),
                         ),
                       ],
                     ),
@@ -1044,6 +1068,7 @@ Future mostrarDialogoContacto(BuildContext context, {Map? contactoExistente, Str
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 value: tipoSel,
+                isExpanded: true,
                 dropdownColor: _BusinessColors.surface,
                 decoration: const InputDecoration(labelText: 'Categoría'),
                 items: const [
@@ -1092,7 +1117,7 @@ Future mostrarDialogoContacto(BuildContext context, {Map? contactoExistente, Str
 Future<bool> mostrarDialogoCompra(BuildContext context) async {
   final db = await DatabaseHelper.instance.database;
   final productos = await db.query('productos', orderBy: 'nombre ASC');
-  final proveedoresDb = await db.query('clientes', where: "tipo = 'Proveedor'", orderBy: 'nombre ASC');
+  final todosContactosDb = await db.query('clientes', orderBy: 'nombre ASC');
 
   if (productos.isEmpty) {
     if (context.mounted) {
@@ -1104,16 +1129,29 @@ Future<bool> mostrarDialogoCompra(BuildContext context) async {
   }
 
   Map prodSel = productos.first;
-  List listaProvs = [
-    'Proveedor General',
-    ...proveedoresDb.map((e) => e['nombre'].toString()).where((n) => n != 'Proveedor General'),
-  ];
-  final provInicialProd = (prodSel['proveedor'] ?? '').toString().trim();
-  if (provInicialProd.isNotEmpty && !listaProvs.contains(provInicialProd)) {
-    listaProvs.add(provInicialProd);
+  bool soloProveedores = true;
+
+  List construirListaContactos(bool filtrarSoloProv) {
+    final filtrados = filtrarSoloProv
+        ? todosContactosDb.where((e) => (e['tipo'] ?? '') == 'Proveedor').toList()
+        : todosContactosDb;
+    final nombres = [
+      'Proveedor General',
+      ...filtrados.map((e) => e['nombre'].toString()).where((n) => n != 'Proveedor General'),
+    ];
+    final pvProd = (prodSel['proveedor'] ?? '').toString().trim();
+    if (pvProd.isNotEmpty && !nombres.contains(pvProd)) {
+      nombres.add(pvProd);
+    }
+    return nombres;
   }
 
-  String provSeleccionado = provInicialProd.isNotEmpty ? provInicialProd : 'Proveedor General';
+  List listaProvs = construirListaContactos(soloProveedores);
+  final provInicialProd = (prodSel['proveedor'] ?? '').toString().trim();
+  String provSeleccionado = (provInicialProd.isNotEmpty && listaProvs.contains(provInicialProd))
+      ? provInicialProd
+      : 'Proveedor General';
+
   final cantCtrl = TextEditingController(text: '1');
   final costoUnitCtrl = TextEditingController(
     text: ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2).replaceAll('.', ','),
@@ -1174,10 +1212,12 @@ Future<bool> mostrarDialogoCompra(BuildContext context) async {
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
-                value: provSeleccionado,
+                value: listaProvs.contains(provSeleccionado) ? provSeleccionado : 'Proveedor General',
                 isExpanded: true,
                 dropdownColor: _BusinessColors.surface,
-                decoration: const InputDecoration(labelText: 'Proveedor'),
+                decoration: InputDecoration(
+                  labelText: soloProveedores ? 'Proveedor' : 'Proveedor / Contacto',
+                ),
                 items: listaProvs
                     .map((nom) => DropdownMenuItem<String>(
                           value: nom,
@@ -1188,24 +1228,47 @@ Future<bool> mostrarDialogoCompra(BuildContext context) async {
                   if (v != null) setDlg(() => provSeleccionado = v);
                 },
               ),
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                  icon: const Icon(Icons.add_business_outlined, size: 16, color: _BusinessColors.softBlue),
-                  label: const Text('+ Nuevo proveedor', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue)),
-                  onPressed: () async {
-                    final creado = await mostrarDialogoContacto(ctx, tipoPorDefecto: 'Proveedor');
-                    if (creado != null) {
-                      final nomNuevo = creado['nombre'].toString();
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton.icon(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    icon: const Icon(Icons.add_business_outlined, size: 16, color: _BusinessColors.softBlue),
+                    label: const Text('+ Nuevo proveedor', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue)),
+                    onPressed: () async {
+                      final creado = await mostrarDialogoContacto(ctx, tipoPorDefecto: 'Proveedor');
+                      if (creado != null) {
+                        final frescos = await db.query('clientes', orderBy: 'nombre ASC');
+                        todosContactosDb
+                          ..clear()
+                          ..addAll(frescos);
+                        setDlg(() {
+                          listaProvs = construirListaContactos(soloProveedores);
+                          final nomNuevo = creado['nombre'].toString();
+                          if (!listaProvs.contains(nomNuevo)) listaProvs.add(nomNuevo);
+                          provSeleccionado = nomNuevo;
+                        });
+                      }
+                    },
+                  ),
+                  TextButton(
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    onPressed: () {
                       setDlg(() {
-                        if (!listaProvs.contains(nomNuevo)) listaProvs.add(nomNuevo);
-                        provSeleccionado = nomNuevo;
+                        soloProveedores = !soloProveedores;
+                        listaProvs = construirListaContactos(soloProveedores);
+                        if (!listaProvs.contains(provSeleccionado)) {
+                          provSeleccionado = 'Proveedor General';
+                        }
                       });
-                    }
-                  },
-                ),
+                    },
+                    child: Text(
+                      soloProveedores ? 'Ver toda la agenda' : 'Solo proveedores',
+                      style: const TextStyle(fontSize: 11, color: _BusinessColors.textMuted),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               Row(
@@ -1377,6 +1440,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
   String metodoPago = 'Efectivo';
   bool cobradoEnElActo = true;
   bool cargando = true;
+  String? errorCarga;
 
   @override
   void initState() {
@@ -1397,7 +1461,7 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
 
   double _precioSegunContacto(Map pr) {
     final esColab = clienteSeleccionado.toLowerCase().contains('colaborador') ||
-        clientes.any((c) => c['nombre'] == clienteSeleccionado && c['tipo'].toString().toLowerCase().contains('colab'));
+        clientes.any((c) => c['nombre'] == clienteSeleccionado && (c['tipo'] ?? '').toString().toLowerCase().contains('colab'));
     if (esColab) {
       return (pr['precio_colaborador'] as num?)?.toDouble() ?? 0.0;
     }
@@ -1405,27 +1469,34 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
   }
 
   Future<void> _cargarDatos() async {
-    final db = await DatabaseHelper.instance.database;
-    final prods = await db.query('productos', orderBy: 'nombre ASC');
-    final clis = await db.query(
-      'clientes',
-      where: "tipo != 'Proveedor'",
-      orderBy: 'nombre ASC',
-    );
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final prods = await db.query('productos', orderBy: 'nombre ASC');
+      final todos = await db.query('clientes', orderBy: 'nombre ASC');
+      final clis = todos.where((c) => (c['tipo'] ?? 'Cliente Final') != 'Proveedor').toList();
 
-    setState(() {
-      productos = prods;
-      clientes = clis;
-      if (lineas.isEmpty && prods.isNotEmpty) {
-        final primero = prods.first;
-        lineas.add(_LineaVentaDraft(
-          producto: primero,
-          cant: '1',
-          precio: _precioSegunContacto(primero).toStringAsFixed(2).replaceAll('.', ','),
-        ));
-      }
-      cargando = false;
-    });
+      if (!mounted) return;
+      setState(() {
+        productos = prods;
+        clientes = clis;
+        if (lineas.isEmpty && prods.isNotEmpty) {
+          final primero = prods.first;
+          lineas.add(_LineaVentaDraft(
+            producto: primero,
+            cant: '1',
+            precio: _precioSegunContacto(primero).toStringAsFixed(2).replaceAll('.', ','),
+          ));
+        }
+        cargando = false;
+        errorCarga = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        cargando = false;
+        errorCarga = e.toString();
+      });
+    }
   }
 
   void _actualizarPreciosPorCliente() {
@@ -1519,10 +1590,8 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
     }
 
     final db = await DatabaseHelper.instance.database;
-    final tipoCli = clientes.firstWhere(
-      (c) => c['nombre'] == clienteSeleccionado,
-      orElse: () => {'tipo': 'Cliente Final'},
-    )['tipo'].toString();
+    final matchCli = clientes.where((c) => c['nombre'] == clienteSeleccionado).toList();
+    final tipoCli = matchCli.isNotEmpty ? (matchCli.first['tipo'] ?? 'Cliente Final').toString() : 'Cliente Final';
     await DatabaseHelper.instance.asegurarContacto(clienteSeleccionado, tipoCli);
 
     final estadoCobro = cobradoEnElActo ? 'Pagado' : 'Pendiente';
@@ -1564,13 +1633,13 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final opcionesCliente = [
-      'Cliente General',
-      ...clientes.map((c) {
-        final nom = c['nombre'].toString();
-        return nom;
-      }).where((n) => n != 'Cliente General'),
-    ];
+    final opcionesCliente = <String>['Cliente General'];
+    for (final c in clientes) {
+      final nom = (c['nombre'] ?? '').toString();
+      if (nom.isNotEmpty && !opcionesCliente.contains(nom)) {
+        opcionesCliente.add(nom);
+      }
+    }
     if (!opcionesCliente.contains(clienteSeleccionado)) {
       opcionesCliente.add(clienteSeleccionado);
     }
@@ -1597,386 +1666,369 @@ class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
           ),
         ],
       ),
-      body: cargando
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: _BusinessColors.card,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _BusinessColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        child: cargando
+            ? const Center(child: CircularProgressIndicator())
+            : errorCarga != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text('Error al cargar: $errorCarga', style: const TextStyle(color: _BusinessColors.danger)),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Cliente / Colaborador', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                                const SizedBox(height: 6),
-                                DropdownButtonFormField<String>(
-                                  value: clienteSeleccionado,
-                                  isExpanded: true,
-                                  dropdownColor: _BusinessColors.surface,
-                                  items: opcionesCliente.map((nom) {
-                                    final item = clientes.firstWhere((c) => c['nombre'] == nom, orElse: () => {});
-                                    final esCol = item['tipo']?.toString() == 'Colaborador';
-                                    return DropdownMenuItem<String>(
-                                      value: nom,
-                                      child: Text(
-                                        esCol ? '$nom (Colab.)' : nom,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 13),
-                                      ),
-                                    );
-                                  }).toList(),
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setState(() => clienteSeleccionado = val);
-                                      _actualizarPreciosPorCliente();
-                                    }
-                                  },
-                                ),
-                              ],
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _BusinessColors.card,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: _BusinessColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Cliente / Colaborador', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<String>(
+                              value: clienteSeleccionado,
+                              isExpanded: true,
+                              dropdownColor: _BusinessColors.surface,
+                              items: opcionesCliente.map((nom) {
+                                final match = clientes.where((c) => c['nombre'] == nom).toList();
+                                final esCol = match.isNotEmpty && (match.first['tipo'] ?? '') == 'Colaborador';
+                                return DropdownMenuItem<String>(
+                                  value: nom,
+                                  child: Text(
+                                    esCol ? '$nom (Colab.)' : nom,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => clienteSeleccionado = val);
+                                  _actualizarPreciosPorCliente();
+                                }
+                              },
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            const SizedBox(height: 10),
+                            Row(
                               children: [
-                                const Text('Fecha', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                                const SizedBox(height: 6),
-                                InkWell(
-                                  onTap: () => _elegirFecha(false),
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: InputDecorator(
-                                    decoration: const InputDecoration(),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(_fechaCortaEs(fechaIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
-                                        const Icon(Icons.keyboard_arrow_down, size: 18, color: _BusinessColors.textMuted),
-                                      ],
+                                Expanded(
+                                  child: OutlinedButton(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _BusinessColors.textMain,
+                                      backgroundColor: _BusinessColors.surface,
+                                      side: const BorderSide(color: _BusinessColors.border),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    onPressed: _dialogoNuevoContacto,
+                                    child: const Text('+ Nuevo contacto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () => _elegirFecha(false),
+                                    borderRadius: BorderRadius.circular(10),
+                                    child: InputDecorator(
+                                      decoration: const InputDecoration(labelText: 'Fecha'),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(_fechaCortaEs(fechaIso), style: const TextStyle(fontSize: 12, color: _BusinessColors.textMain)),
+                                          const Icon(Icons.calendar_today_outlined, size: 15, color: _BusinessColors.textMuted),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _BusinessColors.textMain,
-                          backgroundColor: _BusinessColors.surface,
-                          side: const BorderSide(color: _BusinessColors.border),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: _dialogoNuevoContacto,
-                        child: const Text('+ Nuevo contacto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: _BusinessColors.card,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _BusinessColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Líneas', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                      const SizedBox(height: 10),
-                      if (productos.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 10),
-                          child: Text('No hay productos creados. Ve a Stock para añadir productos.', style: TextStyle(color: _BusinessColors.amberSoft, fontSize: 12)),
-                        )
-                      else ...[
-                        const Row(
-                          children: [
-                            Expanded(flex: 4, child: Text('Producto', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
-                            SizedBox(width: 6),
-                            Expanded(flex: 2, child: Text('Cant.', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
-                            SizedBox(width: 6),
-                            Expanded(flex: 3, child: Text('Precio', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
-                            SizedBox(width: 6),
-                            Expanded(flex: 3, child: Text('Importe', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted))),
-                            SizedBox(width: 24),
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        ...lineas.map((l) {
-                          final cant = int.tryParse(l.cantCtrl.text.trim()) ?? 0;
-                          final prU = _parseNum(l.precioCtrl.text);
-                          final impL = cant * prU;
-                          final prodIdActual = l.producto?['id'] as int?;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _BusinessColors.card,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: _BusinessColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Líneas de producto', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+                            const SizedBox(height: 10),
+                            if (productos.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 10),
+                                child: Text('No hay productos creados. Ve a Stock para añadir productos.', style: TextStyle(color: _BusinessColors.amberSoft, fontSize: 12)),
+                              )
+                            else
+                              ...lineas.asMap().entries.map((entry) {
+                                final idx = entry.key;
+                                final l = entry.value;
+                                final cant = int.tryParse(l.cantCtrl.text.trim()) ?? 0;
+                                final prU = _parseNum(l.precioCtrl.text);
+                                final impL = cant * prU;
+                                final prodIdActual = l.producto?['id'] as int?;
+                                final idsValidos = productos.map((pItem) => pItem['id'] as int).toList();
+                                final valorDropdown = (prodIdActual != null && idsValidos.contains(prodIdActual))
+                                    ? prodIdActual
+                                    : (idsValidos.isNotEmpty ? idsValidos.first : null);
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: _BusinessColors.surface,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: _BusinessColors.border),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: DropdownButtonFormField<int>(
+                                              value: valorDropdown,
+                                              isExpanded: true,
+                                              dropdownColor: _BusinessColors.card,
+                                              decoration: InputDecoration(labelText: 'Producto #${idx + 1}'),
+                                              items: productos
+                                                  .map((pItem) => DropdownMenuItem<int>(
+                                                        value: pItem['id'] as int,
+                                                        child: Text('${pItem['nombre']} (Stock: ${pItem['stock']})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                                                      ))
+                                                  .toList(),
+                                              onChanged: (id) {
+                                                if (id == null) return;
+                                                final elegido = productos.firstWhere((e) => e['id'] == id);
+                                                setState(() {
+                                                  l.producto = elegido;
+                                                  l.precioCtrl.text = _precioSegunContacto(elegido).toStringAsFixed(2).replaceAll('.', ',');
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          IconButton(
+                                            icon: const Icon(Icons.close, size: 18, color: _BusinessColors.danger),
+                                            onPressed: () {
+                                              setState(() {
+                                                l.dispose();
+                                                lineas.remove(l);
+                                              });
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: l.cantCtrl,
+                                              keyboardType: TextInputType.number,
+                                              decoration: const InputDecoration(labelText: 'Cantidad'),
+                                              onChanged: (_) => setState(() {}),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: TextField(
+                                              controller: l.precioCtrl,
+                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                              decoration: const InputDecoration(labelText: 'Precio (€)'),
+                                              onChanged: (_) => setState(() {}),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              children: [
+                                                const Text('Importe', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted)),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  _fmtEur(impL),
+                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _BusinessColors.emeraldBright),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            const SizedBox(height: 4),
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _BusinessColors.textMain,
+                                backgroundColor: _BusinessColors.surface,
+                                side: const BorderSide(color: _BusinessColors.border),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              onPressed: _anadirLinea,
+                              child: const Text('+ Añadir producto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _BusinessColors.card,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: _BusinessColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
                                 Expanded(
-                                  flex: 4,
-                                  child: DropdownButtonFormField<int>(
-                                    value: prodIdActual,
+                                  child: TextField(
+                                    controller: descuentoCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: const InputDecoration(labelText: 'Descuento (€)'),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: TextField(
+                                    controller: ivaCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    decoration: const InputDecoration(labelText: 'IVA %'),
+                                    onChanged: (_) => setState(() {}),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    value: metodoPago,
                                     isExpanded: true,
                                     dropdownColor: _BusinessColors.surface,
-                                    items: productos
-                                        .map((pItem) => DropdownMenuItem<int>(
-                                              value: pItem['id'] as int,
-                                              child: Text(pItem['nombre'].toString(), overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                                            ))
-                                        .toList(),
-                                    onChanged: (id) {
-                                      if (id == null) return;
-                                      final elegido = productos.firstWhere((e) => e['id'] == id);
-                                      setState(() {
-                                        l.producto = elegido;
-                                        l.precioCtrl.text = _precioSegunContacto(elegido).toStringAsFixed(2).replaceAll('.', ',');
-                                      });
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  flex: 2,
-                                  child: TextField(
-                                    controller: l.cantCtrl,
-                                    keyboardType: TextInputType.number,
-                                    style: const TextStyle(fontSize: 12),
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  flex: 3,
-                                  child: TextField(
-                                    controller: l.precioCtrl,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    style: const TextStyle(fontSize: 12),
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  flex: 3,
-                                  child: Text(
-                                    _fmtEur(impL),
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 24,
-                                  child: IconButton(
-                                    padding: EdgeInsets.zero,
-                                    icon: const Icon(Icons.close, size: 16, color: _BusinessColors.textMuted),
-                                    onPressed: () {
-                                      setState(() {
-                                        l.dispose();
-                                        lineas.remove(l);
-                                      });
-                                    },
+                                    decoration: const InputDecoration(labelText: 'Método'),
+                                    items: const [
+                                      DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: 'Bizum', child: Text('Bizum', style: TextStyle(fontSize: 12))),
+                                      DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia', style: TextStyle(fontSize: 12))),
+                                    ],
+                                    onChanged: (v) => setState(() => metodoPago = v!),
                                   ),
                                 ),
                               ],
                             ),
-                          );
-                        }),
-                      ],
-                      const SizedBox(height: 4),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: _BusinessColors.textMain,
-                          backgroundColor: _BusinessColors.surface,
-                          side: const BorderSide(color: _BusinessColors.border),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        onPressed: _anadirLinea,
-                        child: const Text('+ Añadir producto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                ),
 
-                const SizedBox(height: 14),
+                            const SizedBox(height: 10),
 
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: _BusinessColors.card,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: _BusinessColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
                               children: [
-                                const Text('Descuento (€)', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                                const SizedBox(height: 6),
-                                TextField(
-                                  controller: descuentoCtrl,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  onChanged: (_) => setState(() {}),
+                                Checkbox(
+                                  value: cobradoEnElActo,
+                                  activeColor: _BusinessColors.primaryBlue,
+                                  onChanged: (v) => setState(() => cobradoEnElActo = v ?? true),
                                 ),
+                                const Text('Cobrado en el acto', style: TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('IVA %', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                                const SizedBox(height: 6),
-                                TextField(
-                                  controller: ivaCtrl,
-                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                  onChanged: (_) => setState(() {}),
+
+                            if (!cobradoEnElActo) ...[
+                              const SizedBox(height: 6),
+                              InkWell(
+                                onTap: () => _elegirFecha(true),
+                                borderRadius: BorderRadius.circular(10),
+                                child: InputDecorator(
+                                  decoration: const InputDecoration(labelText: 'Fecha de vencimiento'),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(_fechaCortaEs(fechaVencIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
+                                      const Icon(Icons.keyboard_arrow_down, size: 18, color: _BusinessColors.textMuted),
+                                    ],
+                                  ),
                                 ),
-                              ],
+                              ),
+                            ],
+
+                            const SizedBox(height: 10),
+                            TextField(
+                              controller: notasCtrl,
+                              maxLines: 2,
+                              decoration: const InputDecoration(labelText: 'Notas', hintText: 'Observaciones de envío, entrega o cobro...'),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Método', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                                const SizedBox(height: 6),
-                                DropdownButtonFormField<String>(
-                                  value: metodoPago,
-                                  isExpanded: true,
-                                  dropdownColor: _BusinessColors.surface,
-                                  items: const [
-                                    DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo', style: TextStyle(fontSize: 12))),
-                                    DropdownMenuItem(value: 'Bizum', child: Text('Bizum', style: TextStyle(fontSize: 12))),
-                                    DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia', style: TextStyle(fontSize: 12))),
-                                  ],
-                                  onChanged: (v) => setState(() => metodoPago = v!),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
 
-                      const SizedBox(height: 10),
+                            const SizedBox(height: 16),
+                            const Divider(color: _BusinessColors.border),
+                            const SizedBox(height: 8),
 
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: cobradoEnElActo,
-                            activeColor: _BusinessColors.primaryBlue,
-                            onChanged: (v) => setState(() => cobradoEnElActo = v ?? true),
-                          ),
-                          const Text('Cobrado en el acto', style: TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
-                        ],
-                      ),
-
-                      if (!cobradoEnElActo) ...[
-                        const SizedBox(height: 6),
-                        const Text('Fecha de vencimiento', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                        const SizedBox(height: 6),
-                        InkWell(
-                          onTap: () => _elegirFecha(true),
-                          borderRadius: BorderRadius.circular(10),
-                          child: InputDecorator(
-                            decoration: const InputDecoration(),
-                            child: Row(
+                            Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(_fechaCortaEs(fechaVencIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
-                                const Icon(Icons.keyboard_arrow_down, size: 18, color: _BusinessColors.textMuted),
+                                const Text('Subtotal', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
+                                Text(_fmtEur(_baseImponible), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
                               ],
                             ),
-                          ),
+                            const SizedBox(height: 6),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('IVA ${_ivaPct.toStringAsFixed(0)}%', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
+                                Text(_fmtEur(_importeIva), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Total', style: TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
+                                Text(_fmtEur(_totalFinal), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Margen estimado', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+                                Text(_fmtEur(_margenEstimado), style: const TextStyle(color: _BusinessColors.emeraldBright, fontSize: 12, fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
-
-                      const SizedBox(height: 10),
-                      const Text('Notas', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: notasCtrl,
-                        maxLines: 2,
-                        decoration: const InputDecoration(hintText: 'Observaciones de envío, entrega o cobro...'),
                       ),
 
-                      const SizedBox(height: 16),
-                      const Divider(color: _BusinessColors.border),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 18),
 
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Subtotal', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
-                          Text(_fmtEur(_baseImponible), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('IVA ${_ivaPct.toStringAsFixed(0)}%', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
-                          Text(_fmtEur(_importeIva), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Total', style: TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
-                          Text(_fmtEur(_totalFinal), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Margen estimado', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-                          Text(_fmtEur(_margenEstimado), style: const TextStyle(color: _BusinessColors.emeraldBright, fontSize: 12, fontWeight: FontWeight.w600)),
-                        ],
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _BusinessColors.emerald,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: _guardarVenta,
+                          child: const Text('Guardar venta', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                        ),
                       ),
                     ],
                   ),
-                ),
-
-                const SizedBox(height: 18),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _BusinessColors.emerald,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: _guardarVenta,
-                    child: const Text('Guardar venta', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
+      ),
     );
   }
 }
@@ -2122,79 +2174,106 @@ class _StockScreenState extends State<StockScreen> {
     if (mounted) setState(() => todosProductos = res);
   }
 
-  void _dialogoProducto([Map? prod]) {
+  Future<void> _dialogoProducto([Map? prod]) async {
+    final db = await DatabaseHelper.instance.database;
+    final provsDb = await db.query('clientes', where: "tipo = 'Proveedor'", orderBy: 'nombre ASC');
+    final listaProvs = <String>[
+      '',
+      ...provsDb.map((e) => e['nombre'].toString()).where((n) => n.isNotEmpty),
+    ];
+    final provActual = (prod?['proveedor'] ?? '').toString().trim();
+    if (provActual.isNotEmpty && !listaProvs.contains(provActual)) {
+      listaProvs.add(provActual);
+    }
+
+    String provSeleccionado = provActual;
     final nombreCtrl = TextEditingController(text: prod?['nombre'] ?? '');
-    final provCtrl = TextEditingController(text: prod?['proveedor'] ?? '');
     final stockCtrl = TextEditingController(text: (prod?['stock'] ?? 0).toString());
     final costoCtrl = TextEditingController(text: prod != null ? ((prod['costo_compra'] as num).toDouble().toStringAsFixed(2).replaceAll('.', ',')) : '0,00');
     final pvpCtrl = TextEditingController(text: prod != null ? ((prod['precio_pvp'] as num).toDouble().toStringAsFixed(2).replaceAll('.', ',')) : '0,00');
     final colabCtrl = TextEditingController(text: prod != null ? ((prod['precio_colaborador'] as num).toDouble().toStringAsFixed(2).replaceAll('.', ',')) : '0,00');
 
+    if (!mounted) return;
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: _BusinessColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
-        title: Text(prod == null ? 'Nuevo producto' : 'Editar producto', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre del producto')),
-              const SizedBox(height: 10),
-              TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor habitual')),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(child: TextField(controller: stockCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock (uds)'))),
-                  const SizedBox(width: 10),
-                  Expanded(child: TextField(controller: costoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Coste (€)'))),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(child: TextField(controller: pvpCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'PVP (€)'))),
-                  const SizedBox(width: 10),
-                  Expanded(child: TextField(controller: colabCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Colaborador (€)'))),
-                ],
-              ),
-            ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          backgroundColor: _BusinessColors.card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
+          title: Text(prod == null ? 'Nuevo producto' : 'Editar producto', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre del producto')),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: listaProvs.contains(provSeleccionado) ? provSeleccionado : '',
+                  isExpanded: true,
+                  dropdownColor: _BusinessColors.surface,
+                  decoration: const InputDecoration(labelText: 'Proveedor habitual'),
+                  items: listaProvs
+                      .map((nom) => DropdownMenuItem<String>(
+                            value: nom,
+                            child: Text(nom.isEmpty ? 'Sin proveedor asignado' : nom, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setDlg(() => provSeleccionado = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: stockCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock (uds)'))),
+                    const SizedBox(width: 10),
+                    Expanded(child: TextField(controller: costoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Coste (€)'))),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: pvpCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'PVP (€)'))),
+                    const SizedBox(width: 10),
+                    Expanded(child: TextField(controller: colabCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Colaborador (€)'))),
+                  ],
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
+              onPressed: () async {
+                final nom = nombreCtrl.text.trim();
+                if (nom.isEmpty) return;
+                double pNum(TextEditingController c) => double.tryParse(c.text.replaceAll(',', '.').trim()) ?? 0.0;
+                final prov = provSeleccionado.trim();
+                if (prov.isNotEmpty) {
+                  await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
+                }
+                final data = {
+                  'nombre': nom,
+                  'proveedor': prov,
+                  'stock': int.tryParse(stockCtrl.text.trim()) ?? 0,
+                  'costo_compra': pNum(costoCtrl),
+                  'precio_pvp': pNum(pvpCtrl),
+                  'precio_colaborador': pNum(colabCtrl),
+                };
+                if (prod == null) {
+                  await db.insert('productos', data);
+                } else {
+                  await db.update('productos', data, where: 'id = ?', whereArgs: [prod['id']]);
+                }
+                if (ctx.mounted) Navigator.pop(ctx);
+                _cargar();
+                widget.onChanged();
+              },
+              child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
-            onPressed: () async {
-              final nom = nombreCtrl.text.trim();
-              if (nom.isEmpty) return;
-              double pNum(TextEditingController c) => double.tryParse(c.text.replaceAll(',', '.').trim()) ?? 0.0;
-              final prov = provCtrl.text.trim();
-              if (prov.isNotEmpty) {
-                await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
-              }
-              final data = {
-                'nombre': nom,
-                'proveedor': prov,
-                'stock': int.tryParse(stockCtrl.text.trim()) ?? 0,
-                'costo_compra': pNum(costoCtrl),
-                'precio_pvp': pNum(pvpCtrl),
-                'precio_colaborador': pNum(colabCtrl),
-              };
-              final db = await DatabaseHelper.instance.database;
-              if (prod == null) {
-                await db.insert('productos', data);
-              } else {
-                await db.update('productos', data, where: 'id = ?', whereArgs: [prod['id']]);
-              }
-              if (ctx.mounted) Navigator.pop(ctx);
-              _cargar();
-              widget.onChanged();
-            },
-            child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
   }
@@ -2927,7 +3006,6 @@ class _ClientesScreenState extends State<ClientesScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Pestañas Cliente / Colaborador / Proveedor
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
