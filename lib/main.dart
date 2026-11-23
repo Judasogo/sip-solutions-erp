@@ -90,7 +90,7 @@ class DatabaseHelper {
     final path = p.join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       onOpen: (db) async {
@@ -104,8 +104,13 @@ class DatabaseHelper {
   }
 
   Future<void> _asegurarEsquema(Database db) async {
-    await _createDB(db, 2);
-    final colsClientes = ["tipo TEXT NOT NULL DEFAULT 'Cliente Final'", "telefono TEXT DEFAULT ''", "notas TEXT DEFAULT ''"];
+    await _createDB(db, 3);
+    final colsClientes = [
+      "tipo TEXT NOT NULL DEFAULT 'Cliente Final'",
+      "rol TEXT NOT NULL DEFAULT 'Administrador'",
+      "telefono TEXT DEFAULT ''",
+      "notas TEXT DEFAULT ''",
+    ];
     for (final col in colsClientes) {
       try {
         await db.execute('ALTER TABLE clientes ADD COLUMN $col');
@@ -137,6 +142,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL UNIQUE,
         tipo TEXT NOT NULL DEFAULT 'Cliente Final',
+        rol TEXT NOT NULL DEFAULT 'Administrador',
         telefono TEXT DEFAULT '',
         notas TEXT DEFAULT ''
       )
@@ -163,7 +169,7 @@ class DatabaseHelper {
     ''');
   }
 
-  Future<void> asegurarContacto(String nombre, String tipo, {String telefono = '', String notas = ''}) async {
+  Future<void> asegurarContacto(String nombre, String tipo, {String rol = 'Empleado', String telefono = '', String notas = ''}) async {
     final limpio = nombre.trim();
     if (limpio.isEmpty || limpio == 'Cliente General' || limpio == 'Proveedor General') return;
     final db = await database;
@@ -176,6 +182,7 @@ class DatabaseHelper {
       await db.insert('clientes', {
         'nombre': limpio,
         'tipo': tipo,
+        'rol': rol,
         'telefono': telefono,
         'notas': notas,
       });
@@ -201,14 +208,30 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
   int _refreshTick = 0;
+  String _rolActual = 'Administrador'; // 'Administrador' | 'Empleado'
   String _filtroKardexInicial = 'TODOS';
   bool _soloStockBajoInicial = false;
+
+  bool get _esAdmin => _rolActual == 'Administrador';
 
   void _notificarCambio() {
     setState(() => _refreshTick++);
   }
 
+  void _cambiarRol(String nuevoRol) {
+    setState(() {
+      _rolActual = nuevoRol;
+      if (!_esAdmin && _index > 2) {
+        _index = 0;
+      }
+      _refreshTick++;
+    });
+  }
+
   void _irAPestana(int idx, {String? filtroKardex, bool? soloStockBajo}) {
+    if (!_esAdmin && idx > 2) {
+      idx = 2;
+    }
     setState(() {
       _index = idx;
       if (filtroKardex != null) _filtroKardexInicial = filtroKardex;
@@ -340,7 +363,48 @@ class _MainShellState extends State<MainShell> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Acciones & Módulos ERP Juan v1.2', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+            Text(
+              'ERP Juan v1.2 · Perfil $_rolActual',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Center(child: Text('Administrador')),
+                    selected: _rolActual == 'Administrador',
+                    selectedColor: _BusinessColors.primaryBlue,
+                    backgroundColor: _BusinessColors.surface,
+                    labelStyle: TextStyle(
+                      color: _rolActual == 'Administrador' ? Colors.white : _BusinessColors.textMuted,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    onSelected: (_) {
+                      Navigator.pop(ctx);
+                      _cambiarRol('Administrador');
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Center(child: Text('Empleado')),
+                    selected: _rolActual == 'Empleado',
+                    selectedColor: _BusinessColors.emerald,
+                    backgroundColor: _BusinessColors.surface,
+                    labelStyle: TextStyle(
+                      color: _rolActual == 'Empleado' ? Colors.white : _BusinessColors.textMuted,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    onSelected: (_) {
+                      Navigator.pop(ctx);
+                      _cambiarRol('Empleado');
+                    },
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -360,53 +424,57 @@ class _MainShellState extends State<MainShell> {
                     },
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _BusinessColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                if (_esAdmin) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _BusinessColors.primaryBlue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.inventory_rounded, size: 18),
+                      label: const Text('Nueva Compra', style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _abrirNuevaCompraDialog();
+                      },
                     ),
-                    icon: const Icon(Icons.inventory_rounded, size: 18),
-                    label: const Text('Nueva Compra', style: TextStyle(fontWeight: FontWeight.bold)),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _abrirNuevaCompraDialog();
-                    },
                   ),
-                ),
+                ],
               ],
             ),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: const Icon(Icons.inventory_2_outlined, color: _BusinessColors.softBlue),
-              title: const Text('Inventario & Tarifas', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Productos, precios PVP / Especial Colaborador y stock', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _irAPestana(2, soloStockBajo: false);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.people_alt_outlined, color: _BusinessColors.emeraldBright),
-              title: const Text('Clientes, Colaboradores y Proveedores', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Agenda comercial y tarifas asignadas', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _irAPestana(5);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.calculate_outlined, color: _BusinessColors.amberSoft),
-              title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
-              subtitle: const Text('Simula precios y beneficios unitarios', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _mostrarCalculadoraMargenes();
-              },
-            ),
+            if (_esAdmin) ...[
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.inventory_2_outlined, color: _BusinessColors.softBlue),
+                title: const Text('Inventario & Tarifas', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Productos, precios PVP / Especial Colaborador y stock', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _irAPestana(2, soloStockBajo: false);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.people_alt_outlined, color: _BusinessColors.emeraldBright),
+                title: const Text('Clientes, Colaboradores y Proveedores', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Agenda comercial y tarifas asignadas', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _irAPestana(5);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.calculate_outlined, color: _BusinessColors.amberSoft),
+                title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
+                subtitle: const Text('Simula precios y beneficios unitarios', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _mostrarCalculadoraMargenes();
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -415,51 +483,82 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pantallas = [
+    final pantallasAdmin = [
       DashboardScreen(
-        key: ValueKey('dash_$_refreshTick'),
+        key: ValueKey('dash_${_rolActual}_$_refreshTick'),
+        rolActual: _rolActual,
         onChanged: _notificarCambio,
         onAbrirMenuMas: _abrirMenuMas,
+        onCambiarRol: _cambiarRol,
+        onNuevaVenta: _abrirNuevaVentaPantalla,
         onIrPestana: _irAPestana,
       ),
       VentasScreen(
-        key: ValueKey('ventas_$_refreshTick'),
+        key: ValueKey('ventas_${_rolActual}_$_refreshTick'),
         onChanged: _notificarCambio,
         onNuevaVenta: _abrirNuevaVentaPantalla,
       ),
       StockScreen(
-        key: ValueKey('stock_$_refreshTick'),
+        key: ValueKey('stock_${_rolActual}_$_refreshTick'),
+        esAdmin: _esAdmin,
         onChanged: _notificarCambio,
         onNuevaCompra: _abrirNuevaCompraDialog,
         soloStockBajoInicial: _soloStockBajoInicial,
       ),
       CobrosScreen(
-        key: ValueKey('cobros_$_refreshTick'),
+        key: ValueKey('cobros_${_rolActual}_$_refreshTick'),
         onChanged: _notificarCambio,
         onNuevaVenta: _abrirNuevaVentaPantalla,
       ),
       KardexScreen(
-        key: ValueKey('kardex_$_refreshTick'),
+        key: ValueKey('kardex_${_rolActual}_$_refreshTick'),
         onChanged: _notificarCambio,
         onNuevaVenta: _abrirNuevaVentaPantalla,
         onNuevaCompra: _abrirNuevaCompraDialog,
         filtroInicial: _filtroKardexInicial,
       ),
       ClientesScreen(
-        key: ValueKey('clientes_$_refreshTick'),
+        key: ValueKey('clientes_${_rolActual}_$_refreshTick'),
         onChanged: _notificarCambio,
       ),
     ];
 
+    final pantallasEmpleado = [
+      DashboardScreen(
+        key: ValueKey('dash_emp_$_refreshTick'),
+        rolActual: _rolActual,
+        onChanged: _notificarCambio,
+        onAbrirMenuMas: _abrirMenuMas,
+        onCambiarRol: _cambiarRol,
+        onNuevaVenta: _abrirNuevaVentaPantalla,
+        onIrPestana: _irAPestana,
+      ),
+      VentasScreen(
+        key: ValueKey('ventas_emp_$_refreshTick'),
+        onChanged: _notificarCambio,
+        onNuevaVenta: _abrirNuevaVentaPantalla,
+      ),
+      StockScreen(
+        key: ValueKey('stock_emp_$_refreshTick'),
+        esAdmin: false,
+        onChanged: _notificarCambio,
+        onNuevaCompra: _abrirNuevaCompraDialog,
+        soloStockBajoInicial: _soloStockBajoInicial,
+      ),
+    ];
+
+    final pantallas = _esAdmin ? pantallasAdmin : pantallasEmpleado;
+    final safeIndex = _index < pantallas.length ? _index : 0;
+
     return Scaffold(
-      body: SafeArea(child: pantallas[_index]),
+      body: SafeArea(child: pantallas[safeIndex]),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: _BusinessColors.card,
           border: Border(top: BorderSide(color: _BusinessColors.border)),
         ),
         child: BottomNavigationBar(
-          currentIndex: _index,
+          currentIndex: safeIndex,
           type: BottomNavigationBarType.fixed,
           backgroundColor: _BusinessColors.card,
           selectedItemColor: _BusinessColors.softBlue,
@@ -467,14 +566,20 @@ class _MainShellState extends State<MainShell> {
           selectedFontSize: 11,
           unselectedFontSize: 11,
           onTap: (i) => _irAPestana(i, filtroKardex: 'TODOS', soloStockBajo: false),
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Inicio'),
-            BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Ventas'),
-            BottomNavigationBarItem(icon: Icon(Icons.sell_outlined), label: 'Stock'),
-            BottomNavigationBarItem(icon: Icon(Icons.schedule_rounded), label: 'Cobros'),
-            BottomNavigationBarItem(icon: Icon(Icons.swap_vert_rounded), label: 'Kardex'),
-            BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: 'Clientes'),
-          ],
+          items: _esAdmin
+              ? const [
+                  BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Inicio'),
+                  BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Ventas'),
+                  BottomNavigationBarItem(icon: Icon(Icons.sell_outlined), label: 'Stock'),
+                  BottomNavigationBarItem(icon: Icon(Icons.schedule_rounded), label: 'Cobros'),
+                  BottomNavigationBarItem(icon: Icon(Icons.swap_vert_rounded), label: 'Kardex'),
+                  BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: 'Clientes'),
+                ]
+              : const [
+                  BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Inicio'),
+                  BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Ventas'),
+                  BottomNavigationBarItem(icon: Icon(Icons.sell_outlined), label: 'Stock'),
+                ],
         ),
       ),
     );
@@ -482,14 +587,20 @@ class _MainShellState extends State<MainShell> {
 }
 
 class DashboardScreen extends StatefulWidget {
+  final String rolActual;
   final VoidCallback onChanged;
   final VoidCallback onAbrirMenuMas;
+  final void Function(String nuevoRol) onCambiarRol;
+  final Future<void> Function() onNuevaVenta;
   final void Function(int idx, {String? filtroKardex, bool? soloStockBajo}) onIrPestana;
 
   const DashboardScreen({
     super.key,
+    required this.rolActual,
     required this.onChanged,
     required this.onAbrirMenuMas,
+    required this.onCambiarRol,
+    required this.onNuevaVenta,
     required this.onIrPestana,
   });
 
@@ -506,12 +617,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double comprasPeriodo = 0.0;
   double margenBruto = 0.0;
   double valorStock = 0.0;
+  int totalProductosCount = 0;
   int stockBajoCount = 0;
   int ventasCount = 0;
   int comprasCount = 0;
 
   List vencimientos = [];
   List barrasMeses = [];
+
+  bool get _esAdmin => widget.rolActual == 'Administrador';
 
   @override
   void initState() {
@@ -631,6 +745,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         comprasPeriodo = comp;
         margenBruto = mBruto;
         valorStock = vStock;
+        totalProductosCount = prods.length;
         stockBajoCount = sBajo;
         ventasCount = vOps;
         comprasCount = cOps;
@@ -679,9 +794,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                  color: _esAdmin ? _BusinessColors.primaryBlue : _BusinessColors.emerald,
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 alignment: Alignment.center,
-                child: const Text('J', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                child: Text(
+                  _esAdmin ? 'J' : 'E',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -701,10 +822,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           child: const Text('v1.2', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _BusinessColors.softBlue)),
                         ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => widget.onCambiarRol(_esAdmin ? 'Empleado' : 'Administrador'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _BusinessColors.surface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: _esAdmin
+                                    ? _BusinessColors.softBlue.withOpacity(0.45)
+                                    : _BusinessColors.emeraldBright.withOpacity(0.45),
+                              ),
+                            ),
+                            child: Text(
+                              widget.rolActual,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: _esAdmin ? _BusinessColors.softBlue : _BusinessColors.emeraldBright,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text('EN VIVO $horaFmt · $ventasCount ventas · $comprasCount compras', style: const TextStyle(fontSize: 11, color: _BusinessColors.emeraldBright, fontWeight: FontWeight.w500)),
+                    Text(
+                      _esAdmin
+                          ? 'EN VIVO $horaFmt · $ventasCount ventas · $comprasCount compras'
+                          : 'PERFIL EMPLEADO · Ventas y existencias',
+                      style: const TextStyle(fontSize: 11, color: _BusinessColors.emeraldBright, fontWeight: FontWeight.w500),
+                    ),
                   ],
                 ),
               ),
@@ -721,278 +871,327 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
 
-          const SizedBox(height: 12),
-
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: ['Este mes', 'Esta semana', 'Hoy', 'Este año'].map((pItem) {
-                final sel = periodo == pItem;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(pItem),
-                    selected: sel,
-                    selectedColor: _BusinessColors.primaryBlue,
-                    backgroundColor: _BusinessColors.card,
-                    side: BorderSide(color: sel ? _BusinessColors.primaryBlue : _BusinessColors.border),
-                    labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12),
-                    onSelected: (_) {
-                      setState(() => periodo = pItem);
-                      _cargar();
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => widget.onIrPestana(3),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A151E),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _BusinessColors.danger.withOpacity(0.35)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline_rounded, color: _BusinessColors.danger, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '$vencidasCount Deuda(s) Vencida(s) · Cobrar ${_fmtEur(porCobrar)}',
-                      style: const TextStyle(fontSize: 12, color: _BusinessColors.textMain, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _exportarResumen,
-                    child: const Row(
-                      children: [
-                        Icon(Icons.download_rounded, color: _BusinessColors.softBlue, size: 16),
-                        SizedBox(width: 4),
-                        Text('Exportar', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ],
+          if (!_esAdmin) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _BusinessColors.emerald,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.add_shopping_cart_rounded),
+                label: const Text('+ Registrar Nueva Venta', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                onPressed: () async {
+                  await widget.onNuevaVenta();
+                  _cargar();
+                  widget.onChanged();
+                },
               ),
             ),
-          ),
-
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Expanded(
-                child: _tarjetaKpi(
-                  titulo: 'Por Cobrar',
-                  valor: _fmtEur(porCobrar),
-                  subtitulo: '$vencidasCount Vencidas (${_fmtEur(vencidoMonto)})',
-                  subColor: _BusinessColors.danger,
-                  badgeAccion: 'Cobros',
-                  accentColor: _BusinessColors.danger,
-                  onTap: () => widget.onIrPestana(3),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _tarjetaKpi(
-                  titulo: 'Ingresos',
-                  valor: _fmtEur(ingresos),
-                  subtitulo: '$ventasCount ventas cobradas',
-                  subColor: _BusinessColors.emeraldBright,
-                  badgeAccion: 'Ventas',
-                  accentColor: _BusinessColors.emerald,
-                  onTap: () => widget.onIrPestana(1),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _tarjetaKpi(
-                  titulo: 'Valor Stock',
-                  valor: _fmtEur(valorStock),
-                  subtitulo: 'En inventario activo',
-                  subColor: _BusinessColors.textMuted,
-                  badgeAccion: 'Stock',
-                  accentColor: _BusinessColors.primaryBlue,
-                  onTap: () => widget.onIrPestana(2, soloStockBajo: false),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _tarjetaKpi(
-                  titulo: 'Stock Bajo',
-                  valor: '$stockBajoCount Prod.',
-                  subtitulo: 'Requieren reposición',
-                  subColor: _BusinessColors.amberSoft,
-                  badgeAccion: 'Reponer',
-                  accentColor: _BusinessColors.amberSoft,
-                  onTap: () => widget.onIrPestana(2, soloStockBajo: true),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _tarjetaKpi(
-                  titulo: 'Margen Bruto',
-                  valor: _fmtEur(margenBruto),
-                  subtitulo: 'Ventas - Coste producto',
-                  subColor: _BusinessColors.softBlue,
-                  badgeAccion: 'Kardex',
-                  accentColor: _BusinessColors.softBlue,
-                  onTap: () => widget.onIrPestana(4, filtroKardex: 'VENTA'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _tarjetaKpi(
-                  titulo: 'Compras',
-                  valor: _fmtEur(comprasPeriodo),
-                  subtitulo: '$comprasCount órdenes proveedor',
-                  subColor: _BusinessColors.amberSoft,
-                  badgeAccion: 'Compras',
-                  accentColor: _BusinessColors.amber,
-                  onTap: () => widget.onIrPestana(4, filtroKardex: 'COMPRA'),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: _BusinessColors.card,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _BusinessColors.amber.withOpacity(0.4)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 14),
+            Row(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Productos Activos',
+                    valor: '$totalProductosCount Prod.',
+                    subtitulo: 'Consultar existencias',
+                    subColor: _BusinessColors.softBlue,
+                    badgeAccion: 'Stock',
+                    accentColor: _BusinessColors.primaryBlue,
+                    onTap: () => widget.onIrPestana(2, soloStockBajo: false),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Stock Bajo',
+                    valor: '$stockBajoCount Prod.',
+                    subtitulo: 'Aviso de reposición',
+                    subColor: _BusinessColors.amberSoft,
+                    badgeAccion: 'Ver',
+                    accentColor: _BusinessColors.amberSoft,
+                    onTap: () => widget.onIrPestana(2, soloStockBajo: true),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: ['Este mes', 'Esta semana', 'Hoy', 'Este año'].map((pItem) {
+                  final sel = periodo == pItem;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(pItem),
+                      selected: sel,
+                      selectedColor: _BusinessColors.primaryBlue,
+                      backgroundColor: _BusinessColors.card,
+                      side: BorderSide(color: sel ? _BusinessColors.primaryBlue : _BusinessColors.border),
+                      labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12),
+                      onSelected: (_) {
+                        setState(() => periodo = pItem);
+                        _cargar();
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => widget.onIrPestana(3),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A151E),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _BusinessColors.danger.withOpacity(0.35)),
+                ),
+                child: Row(
                   children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.notifications_none_rounded, color: _BusinessColors.amberSoft, size: 19),
-                        SizedBox(width: 8),
-                        Text('Próximos Vencimientos de Cobro', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _BusinessColors.amberSoft)),
-                      ],
+                    const Icon(Icons.error_outline_rounded, color: _BusinessColors.danger, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$vencidasCount Deuda(s) Vencida(s) · Cobrar ${_fmtEur(porCobrar)}',
+                        style: const TextStyle(fontSize: 12, color: _BusinessColors.textMain, fontWeight: FontWeight.w500),
+                      ),
                     ),
                     GestureDetector(
-                      onTap: () => widget.onIrPestana(3),
-                      child: const Text('Ver Todo', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
+                      onTap: _exportarResumen,
+                      child: const Row(
+                        children: [
+                          Icon(Icons.download_rounded, color: _BusinessColors.softBlue, size: 16),
+                          SizedBox(width: 4),
+                          Text('Exportar', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                if (vencimientos.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10)),
-                    child: const Text('No hay cobros pendientes.', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-                  )
-                else
-                  ...vencimientos.take(3).map((v) {
-                    final dias = (v['dias_retraso'] as int?) ?? 0;
-                    final badge = dias > 0 ? 'Venció hace $dias días' : (dias == 0 ? 'Vence hoy' : 'Vence ${_fechaCortaEs(v['fecha_vencimiento'].toString())}');
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: _BusinessColors.border)),
-                      child: Row(
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Row(
+              children: [
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Por Cobrar',
+                    valor: _fmtEur(porCobrar),
+                    subtitulo: '$vencidasCount Vencidas (${_fmtEur(vencidoMonto)})',
+                    subColor: _BusinessColors.danger,
+                    badgeAccion: 'Cobros',
+                    accentColor: _BusinessColors.danger,
+                    onTap: () => widget.onIrPestana(3),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Ingresos',
+                    valor: _fmtEur(ingresos),
+                    subtitulo: '$ventasCount ventas cobradas',
+                    subColor: _BusinessColors.emeraldBright,
+                    badgeAccion: 'Ventas',
+                    accentColor: _BusinessColors.emerald,
+                    onTap: () => widget.onIrPestana(1),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Valor Stock',
+                    valor: _fmtEur(valorStock),
+                    subtitulo: 'En inventario activo',
+                    subColor: _BusinessColors.textMuted,
+                    badgeAccion: 'Stock',
+                    accentColor: _BusinessColors.primaryBlue,
+                    onTap: () => widget.onIrPestana(2, soloStockBajo: false),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Stock Bajo',
+                    valor: '$stockBajoCount Prod.',
+                    subtitulo: 'Requieren reposición',
+                    subColor: _BusinessColors.amberSoft,
+                    badgeAccion: 'Reponer',
+                    accentColor: _BusinessColors.amberSoft,
+                    onTap: () => widget.onIrPestana(2, soloStockBajo: true),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Margen Bruto',
+                    valor: _fmtEur(margenBruto),
+                    subtitulo: 'Ventas - Coste producto',
+                    subColor: _BusinessColors.softBlue,
+                    badgeAccion: 'Kardex',
+                    accentColor: _BusinessColors.softBlue,
+                    onTap: () => widget.onIrPestana(4, filtroKardex: 'VENTA'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _tarjetaKpi(
+                    titulo: 'Compras',
+                    valor: _fmtEur(comprasPeriodo),
+                    subtitulo: '$comprasCount órdenes proveedor',
+                    subColor: _BusinessColors.amberSoft,
+                    badgeAccion: 'Compras',
+                    accentColor: _BusinessColors.amber,
+                    onTap: () => widget.onIrPestana(4, filtroKardex: 'COMPRA'),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _BusinessColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _BusinessColors.amber.withOpacity(0.4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
                         children: [
+                          Icon(Icons.notifications_none_rounded, color: _BusinessColors.amberSoft, size: 19),
+                          SizedBox(width: 8),
+                          Text('Próximos Vencimientos de Cobro', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _BusinessColors.amberSoft)),
+                        ],
+                      ),
+                      GestureDetector(
+                        onTap: () => widget.onIrPestana(3),
+                        child: const Text('Ver Todo', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (vencimientos.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10)),
+                      child: const Text('No hay cobros pendientes.', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
+                    )
+                  else
+                    ...vencimientos.take(3).map((v) {
+                      final dias = (v['dias_retraso'] as int?) ?? 0;
+                      final badge = dias > 0 ? 'Venció hace $dias días' : (dias == 0 ? 'Vence hoy' : 'Vence ${_fechaCortaEs(v['fecha_vencimiento'].toString())}');
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: _BusinessColors.border)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('${v['cliente_proveedor']}', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
+                                  Text('${v['producto_nombre']} · $badge', style: TextStyle(color: dias > 0 ? _BusinessColors.danger : _BusinessColors.textMuted, fontSize: 11)),
+                                ],
+                              ),
+                            ),
+                            Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _BusinessColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _BusinessColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Ventas vs Compras — últimos 6 meses', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+                  const SizedBox(height: 3),
+                  const Text('Se actualiza al crear una venta o compra.', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted)),
+                  const SizedBox(height: 14),
+                  ...barrasMeses.map((b) {
+                    final mes = b['mes'].toString();
+                    final vVal = (b['ventas'] as double);
+                    final cVal = (b['compras'] as double);
+                    final vFrac = (vVal / maxBarra).clamp(0.02, 1.0);
+                    final cFrac = (cVal / maxBarra).clamp(0.02, 1.0);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          SizedBox(width: 36, child: Text(mes, style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600))),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${v['cliente_proveedor']}', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
-                                Text('${v['producto_nombre']} · $badge', style: TextStyle(color: dias > 0 ? _BusinessColors.danger : _BusinessColors.textMuted, fontSize: 11)),
+                                FractionallySizedBox(
+                                  widthFactor: vFrac,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(6)),
+                                    child: Text('Ventas ${vVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                FractionallySizedBox(
+                                  widthFactor: cFrac,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(color: _BusinessColors.amber, borderRadius: BorderRadius.circular(6)),
+                                    child: Text('Compras ${cVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                          Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
                         ],
                       ),
                     );
                   }),
-              ],
+                ],
+              ),
             ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: _BusinessColors.card,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _BusinessColors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Ventas vs Compras — últimos 6 meses', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                const SizedBox(height: 3),
-                const Text('Se actualiza al crear una venta o compra.', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted)),
-                const SizedBox(height: 14),
-                ...barrasMeses.map((b) {
-                  final mes = b['mes'].toString();
-                  final vVal = (b['ventas'] as double);
-                  final cVal = (b['compras'] as double);
-                  final vFrac = (vVal / maxBarra).clamp(0.02, 1.0);
-                  final cFrac = (cVal / maxBarra).clamp(0.02, 1.0);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        SizedBox(width: 36, child: Text(mes, style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600))),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              FractionallySizedBox(
-                                widthFactor: vFrac,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(6)),
-                                  child: Text('Ventas ${vVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              FractionallySizedBox(
-                                widthFactor: cFrac,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(color: _BusinessColors.amber, borderRadius: BorderRadius.circular(6)),
-                                  child: Text('Compras ${cVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -1049,6 +1248,10 @@ Future mostrarDialogoContacto(BuildContext context, {Map? contactoExistente, Str
   if (!['Cliente Final', 'Colaborador', 'Proveedor'].contains(tipoSel)) {
     tipoSel = 'Cliente Final';
   }
+  String rolSel = contactoExistente?['rol']?.toString() ?? 'Empleado';
+  if (!['Administrador', 'Empleado'].contains(rolSel)) {
+    rolSel = 'Empleado';
+  }
 
   return await showDialog(
     context: context,
@@ -1079,6 +1282,18 @@ Future mostrarDialogoContacto(BuildContext context, {Map? contactoExistente, Str
                 onChanged: (v) => setDlg(() => tipoSel = v!),
               ),
               const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                value: rolSel,
+                isExpanded: true,
+                dropdownColor: _BusinessColors.surface,
+                decoration: const InputDecoration(labelText: 'Perfil / Rol en ERP'),
+                items: const [
+                  DropdownMenuItem(value: 'Administrador', child: Text('Administrador (Control total)')),
+                  DropdownMenuItem(value: 'Empleado', child: Text('Empleado (Ventas y stock)')),
+                ],
+                onChanged: (v) => setDlg(() => rolSel = v!),
+              ),
+              const SizedBox(height: 10),
               TextField(controller: telCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Teléfono / WhatsApp')),
               const SizedBox(height: 10),
               TextField(controller: notasCtrl, decoration: const InputDecoration(labelText: 'Notas / Dirección / Referencia')),
@@ -1096,6 +1311,7 @@ Future mostrarDialogoContacto(BuildContext context, {Map? contactoExistente, Str
               final data = {
                 'nombre': nom,
                 'tipo': tipoSel,
+                'rol': rolSel,
                 'telefono': telCtrl.text.trim(),
                 'notas': notasCtrl.text.trim(),
               };
@@ -2141,12 +2357,14 @@ class _VentasScreenState extends State<VentasScreen> {
 }
 
 class StockScreen extends StatefulWidget {
+  final bool esAdmin;
   final VoidCallback onChanged;
   final Future<void> Function() onNuevaCompra;
   final bool soloStockBajoInicial;
 
   const StockScreen({
     super.key,
+    this.esAdmin = true,
     required this.onChanged,
     required this.onNuevaCompra,
     this.soloStockBajoInicial = false,
@@ -2430,54 +2648,60 @@ class _StockScreenState extends State<StockScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Inventario y tarifas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-            Row(
-              children: [
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _BusinessColors.softBlue,
-                    side: const BorderSide(color: _BusinessColors.border),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () async {
-                    await widget.onNuevaCompra();
-                    _cargar();
-                    widget.onChanged();
-                  },
-                  child: const Text('+ Compra', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _BusinessColors.primaryBlue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: () => _dialogoProducto(),
-                  child: const Text('+ Producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                ),
-              ],
+            Text(
+              widget.esAdmin ? 'Inventario y tarifas' : 'Existencias y precios',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
             ),
+            if (widget.esAdmin)
+              Row(
+                children: [
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _BusinessColors.softBlue,
+                      side: const BorderSide(color: _BusinessColors.border),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () async {
+                      await widget.onNuevaCompra();
+                      _cargar();
+                      widget.onChanged();
+                    },
+                    child: const Text('+ Compra', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _BusinessColors.primaryBlue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => _dialogoProducto(),
+                    child: const Text('+ Producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                ],
+              ),
           ],
         ),
         const SizedBox(height: 12),
 
-        Row(
-          children: [
-            Expanded(child: _miniKpiStock('Productos', '${todosProductos.length}', _BusinessColors.textMain, () => setState(() => soloBajo = false))),
-            const SizedBox(width: 10),
-            Expanded(child: _miniKpiStock('Valor inventario', _fmtEur(valTotal), _BusinessColors.textMain, () => setState(() => soloBajo = false))),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(child: _miniKpiStock('Stock bajo', '$bajos', _BusinessColors.danger, () => setState(() => soloBajo = !soloBajo))),
-            const Expanded(child: SizedBox()),
-          ],
-        ),
+        if (widget.esAdmin) ...[
+          Row(
+            children: [
+              Expanded(child: _miniKpiStock('Productos', '${todosProductos.length}', _BusinessColors.textMain, () => setState(() => soloBajo = false))),
+              const SizedBox(width: 10),
+              Expanded(child: _miniKpiStock('Valor inventario', _fmtEur(valTotal), _BusinessColors.textMain, () => setState(() => soloBajo = false))),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _miniKpiStock('Stock bajo', '$bajos', _BusinessColors.danger, () => setState(() => soloBajo = !soloBajo))),
+              const Expanded(child: SizedBox()),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
 
-        const SizedBox(height: 12),
         TextField(
           onChanged: (v) => setState(() => busqueda = v),
           decoration: const InputDecoration(hintText: 'Buscar producto o referencia...', prefixIcon: Icon(Icons.search, color: _BusinessColors.textMuted)),
@@ -2530,29 +2754,33 @@ class _StockScreenState extends State<StockScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Coste ${_fmtEur(coste)} · PVP ${_fmtEur(pvp)} · Colab. ${_fmtEur(colab)} · margen ${margenPct.toStringAsFixed(1).replaceAll('.', ',')} %',
+                    widget.esAdmin
+                        ? 'Coste ${_fmtEur(coste)} · PVP ${_fmtEur(pvp)} · Colab. ${_fmtEur(colab)} · margen ${margenPct.toStringAsFixed(1).replaceAll('.', ',')} %'
+                        : 'PVP ${_fmtEur(pvp)} · Colab. ${_fmtEur(colab)}',
                     style: const TextStyle(fontSize: 12, color: _BusinessColors.textMuted),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _btnAccionStock('Ajustar', () => _dialogoAjustarStock(pr)),
-                      const SizedBox(width: 8),
-                      _btnAccionStock('Historial', () => _verHistorialProducto(pr)),
-                      const SizedBox(width: 8),
-                      _btnAccionStock('Editar', () => _dialogoProducto(pr)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: _BusinessColors.textMuted, size: 20),
-                        onPressed: () async {
-                          final db = await DatabaseHelper.instance.database;
-                          await db.delete('productos', where: 'id = ?', whereArgs: [pr['id']]);
-                          _cargar();
-                          widget.onChanged();
-                        },
-                      ),
-                    ],
-                  ),
+                  if (widget.esAdmin) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _btnAccionStock('Ajustar', () => _dialogoAjustarStock(pr)),
+                        const SizedBox(width: 8),
+                        _btnAccionStock('Historial', () => _verHistorialProducto(pr)),
+                        const SizedBox(width: 8),
+                        _btnAccionStock('Editar', () => _dialogoProducto(pr)),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: _BusinessColors.textMuted, size: 20),
+                          onPressed: () async {
+                            final db = await DatabaseHelper.instance.database;
+                            await db.delete('productos', where: 'id = ?', whereArgs: [pr['id']]);
+                            _cargar();
+                            widget.onChanged();
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             );
@@ -3066,6 +3294,7 @@ class _ClientesScreenState extends State<ClientesScreen> {
         else
           ...filtrados.map((c) {
             final tipo = (c['tipo'] ?? 'Cliente Final').toString();
+            final rol = (c['rol'] ?? 'Empleado').toString();
             final esColab = tipo == 'Colaborador';
             final esProv = tipo == 'Proveedor';
 
@@ -3076,8 +3305,8 @@ class _ClientesScreenState extends State<ClientesScreen> {
                 ? Icons.local_shipping_outlined
                 : (esColab ? Icons.handshake_outlined : Icons.person_outline_rounded);
             final String etiquetaRol = esProv
-                ? 'Proveedor'
-                : (esColab ? 'Colaborador · Tarifa Especial' : 'Cliente · Tarifa PVP');
+                ? 'Proveedor · Perfil $rol'
+                : (esColab ? 'Colaborador · Tarifa Especial · $rol' : 'Cliente · Tarifa PVP · $rol');
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
