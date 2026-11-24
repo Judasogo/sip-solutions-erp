@@ -1,74 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  runApp(const ERPJuanApp());
+  runApp(const ErpJuanApp());
 }
 
-class _BusinessColors {
-  static const bg = Color(0xFF0B0F17);
-  static const card = Color(0xFF121926);
-  static const surface = Color(0xFF182234);
-  static const border = Color(0xFF233044);
-  static const primaryBlue = Color(0xFF3B82F6);
-  static const softBlue = Color(0xFF60A5FA);
-  static const emerald = Color(0xFF10B981);
-  static const emeraldBright = Color(0xFF34D399);
-  static const amber = Color(0xFFD97706);
-  static const amberSoft = Color(0xFFF59E0B);
-  static const purpleSoft = Color(0xFFA78BFA);
-  static const danger = Color(0xFFEF4444);
-  static const textMain = Color(0xFFF1F5F9);
-  static const textMuted = Color(0xFF94A3B8);
-}
-
-class ERPJuanApp extends StatelessWidget {
-  const ERPJuanApp({super.key});
+class ErpJuanApp extends StatelessWidget {
+  const ErpJuanApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ERP Juan v1.2',
+      title: 'ERP Juan',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: _BusinessColors.bg,
-        primaryColor: _BusinessColors.primaryBlue,
-        cardColor: _BusinessColors.card,
-        dialogBackgroundColor: _BusinessColors.card,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0F172A),
         colorScheme: const ColorScheme.dark(
-          primary: _BusinessColors.primaryBlue,
-          secondary: _BusinessColors.emerald,
-          surface: _BusinessColors.card,
-          error: _BusinessColors.danger,
+          primary: Color(0xFF3B82F6),
+          secondary: Color(0xFF10B981),
+          surface: Color(0xFF1E293B),
         ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: _BusinessColors.surface,
-          labelStyle: const TextStyle(color: _BusinessColors.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
-          hintStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _BusinessColors.border),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _BusinessColors.primaryBlue, width: 1.5),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _BusinessColors.border),
-          ),
-        ),
-        useMaterial3: true,
+        cardColor: const Color(0xFF1E293B),
       ),
-      home: const MainShell(),
+      home: const MainNavigationScreen(),
     );
   }
 }
@@ -81,70 +37,41 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('erp_juan_v6.db');
+    _database = await _initDB('erp_juan.db');
     return _database!;
   }
 
   Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
     final path = p.join(dbPath, filePath);
+
     return await openDatabase(
       path,
-      version: 3,
+      version: 1,
       onCreate: _createDB,
-      onUpgrade: _onUpgrade,
-      onOpen: (db) async {
-        await _asegurarEsquema(db);
-      },
     );
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    await _asegurarEsquema(db);
-  }
-
-  Future<void> _asegurarEsquema(Database db) async {
-    await _createDB(db, 3);
-    final colsClientes = [
-      "tipo TEXT NOT NULL DEFAULT 'Cliente Final'",
-      "rol TEXT NOT NULL DEFAULT 'Administrador'",
-      "telefono TEXT DEFAULT ''",
-      "notas TEXT DEFAULT ''",
-    ];
-    for (final col in colsClientes) {
-      try {
-        await db.execute('ALTER TABLE clientes ADD COLUMN $col');
-      } catch (_) {}
-    }
-    final colsProductos = ["proveedor TEXT DEFAULT ''", "precio_colaborador REAL NOT NULL DEFAULT 0.0"];
-    for (final col in colsProductos) {
-      try {
-        await db.execute('ALTER TABLE productos ADD COLUMN $col');
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _createDB(Database db, int version) async {
+  Future _createDB(Database db, int version) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS productos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL,
+        precio_pvp REAL NOT NULL,
+        precio_colaborador REAL NOT NULL,
         stock INTEGER NOT NULL DEFAULT 0,
-        costo_compra REAL NOT NULL DEFAULT 0.0,
-        precio_pvp REAL NOT NULL DEFAULT 0.0,
-        precio_colaborador REAL NOT NULL DEFAULT 0.0,
-        proveedor TEXT DEFAULT ''
+        stock_minimo INTEGER NOT NULL DEFAULT 5
       )
     ''');
 
     await db.execute('''
       CREATE TABLE IF NOT EXISTS clientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL UNIQUE,
-        tipo TEXT NOT NULL DEFAULT 'Cliente Final',
-        rol TEXT NOT NULL DEFAULT 'Administrador',
-        telefono TEXT DEFAULT '',
-        notas TEXT DEFAULT ''
+        nombre TEXT NOT NULL,
+        categoria TEXT NOT NULL,
+        telefono TEXT,
+        notas TEXT,
+        rol TEXT DEFAULT 'N/A'
       )
     ''');
 
@@ -153,656 +80,192 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tipo TEXT NOT NULL,
         producto_id INTEGER,
-        producto_nombre TEXT NOT NULL,
-        cliente_proveedor TEXT NOT NULL,
-        tarifa TEXT DEFAULT 'PVP',
-        cantidad INTEGER NOT NULL DEFAULT 1,
-        precio_unitario REAL NOT NULL DEFAULT 0.0,
-        importe REAL NOT NULL DEFAULT 0.0,
-        costo_total REAL NOT NULL DEFAULT 0.0,
-        metodo_pago TEXT DEFAULT 'Efectivo',
-        estado_cobro TEXT DEFAULT 'Pagado',
-        notas TEXT DEFAULT '',
-        fecha TEXT NOT NULL,
-        fecha_vencimiento TEXT NOT NULL
+        contacto_id INTEGER,
+        cantidad INTEGER NOT NULL,
+        total REAL NOT NULL,
+        estado_pago TEXT NOT NULL,
+        fecha TEXT NOT NULL
       )
     ''');
   }
 
-  Future<void> asegurarContacto(String nombre, String tipo, {String rol = 'Empleado', String telefono = '', String notas = ''}) async {
-    final limpio = nombre.trim();
-    if (limpio.isEmpty || limpio == 'Cliente General' || limpio == 'Proveedor General') return;
-    final db = await database;
-    final existe = await db.query(
-      'clientes',
-      where: 'LOWER(nombre) = ?',
-      whereArgs: [limpio.toLowerCase()],
-    );
-    if (existe.isEmpty) {
-      await db.insert('clientes', {
-        'nombre': limpio,
-        'tipo': tipo,
-        'rol': rol,
-        'telefono': telefono,
-        'notas': notas,
-      });
+  // --- CRUD CONTACTOS (Conservando registros existentes) ---
+  Future<List>> getContactos({String? categoria, String? query}) async {
+    final db = await instance.database;
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+
+    if (categoria != null && categoria != 'Todos') {
+      whereClause = 'categoria = ?';
+      whereArgs.add(categoria);
     }
+
+    if (query != null && query.isNotEmpty) {
+      if (whereClause.isNotEmpty) whereClause += ' AND ';
+      whereClause += '(nombre LIKE ? OR telefono LIKE ?)';
+      whereArgs.add('%$query%');
+      whereArgs.add('%$query%');
+    }
+
+    return await db.query(
+      'clientes',
+      where: whereClause.isEmpty ? null : whereClause,
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'id DESC',
+    );
+  }
+
+  Future<int> insertContacto(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    // Asegura compatibilidad si la tabla ya tenía la columna 'rol'
+    final columns = await db.rawQuery('PRAGMA table_info(clientes)');
+    final hasRol = columns.any((col) => col['name'] == 'rol');
+    final data = Map<String, dynamic>.from(row);
+    if (!hasRol) {
+      data.remove('rol');
+    }
+    return await db.insert('clientes', data);
+  }
+
+  Future<int> deleteContacto(int id) async {
+    final db = await instance.database;
+    return await db.delete('clientes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- CRUD PRODUCTOS ---
+  Future<List>> getProductos() async {
+    final db = await instance.database;
+    return await db.query('productos', orderBy: 'nombre ASC');
+  }
+
+  Future<int> insertProducto(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('productos', row);
+  }
+
+  // --- CRUD MOVIMIENTOS ---
+  Future<List>> getMovimientos({String? tipo}) async {
+    final db = await instance.database;
+    return await db.query(
+      'movimientos',
+      where: tipo != null ? 'tipo = ?' : null,
+      whereArgs: tipo != null ? [tipo] : null,
+      orderBy: 'id DESC',
+    );
+  }
+
+  Future<int> insertMovimiento(Map<String, dynamic> row) async {
+    final db = await instance.database;
+    return await db.insert('movimientos', row);
   }
 }
 
-String _fmtEur(double val) => '${val.toStringAsFixed(2).replaceAll('.', ',')} €';
-
-String _fechaCortaEs(String iso) {
-  final partes = iso.split('-');
-  if (partes.length == 3) return '${partes[2]}/${partes[1]}/${partes[0]}';
-  return iso;
-}
-
-class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+class MainNavigationScreen extends StatefulWidget {
+  const MainNavigationScreen({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
 
-class _MainShellState extends State<MainShell> {
-  int _index = 0;
-  int _refreshTick = 0;
-  String _rolActual = 'Administrador'; // 'Administrador' | 'Empleado'
-  String _filtroKardexInicial = 'TODOS';
-  bool _soloStockBajoInicial = false;
+class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  int _selectedIndex = 0;
+  String _perfilActivo = 'Administrador'; // 'Administrador' o 'Empleado'
 
-  bool get _esAdmin => _rolActual == 'Administrador';
-
-  void _notificarCambio() {
-    setState(() => _refreshTick++);
-  }
-
-  void _cambiarRol(String nuevoRol) {
+  void _cambiarPerfil(String nuevoPerfil) {
     setState(() {
-      _rolActual = nuevoRol;
-      if (!_esAdmin && _index > 2) {
-        _index = 0;
+      _perfilActivo = nuevoPerfil;
+      // Si el empleado estaba en una pestaña exclusiva de admin, volver a Inicio
+      if (_perfilActivo == 'Empleado' && _selectedIndex > 2) {
+        _selectedIndex = 0;
       }
-      _refreshTick++;
     });
-  }
-
-  void _irAPestana(int idx, {String? filtroKardex, bool? soloStockBajo}) {
-    if (!_esAdmin && idx > 2) {
-      idx = 2;
-    }
-    setState(() {
-      _index = idx;
-      if (filtroKardex != null) _filtroKardexInicial = filtroKardex;
-      if (soloStockBajo != null) _soloStockBajoInicial = soloStockBajo;
-      _refreshTick++;
-    });
-  }
-
-  Future<void> _abrirNuevaVentaPantalla() async {
-    final guardada = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => const NuevaVentaScreen()),
-    );
-    if (guardada == true) _notificarCambio();
-  }
-
-  Future<void> _abrirNuevaCompraDialog() async {
-    final guardada = await mostrarDialogoCompra(context);
-    if (guardada == true) _notificarCambio();
-  }
-
-  void _mostrarCalculadoraMargenes() {
-    final costoCtrl = TextEditingController(text: '10,00');
-    final pvpCtrl = TextEditingController(text: '25,00');
-    final colabCtrl = TextEditingController(text: '18,00');
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) {
-          double parse(String s) => double.tryParse(s.replaceAll(',', '.').trim()) ?? 0.0;
-          final c = parse(costoCtrl.text);
-          final pvp = parse(pvpCtrl.text);
-          final col = parse(colabCtrl.text);
-          final benPvp = pvp - c;
-          final pctPvp = pvp > 0 ? ((benPvp / pvp) * 100) : 0.0;
-          final benCol = col - c;
-          final pctCol = col > 0 ? ((benCol / col) * 100) : 0.0;
-
-          return AlertDialog(
-            backgroundColor: _BusinessColors.card,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: const BorderSide(color: _BusinessColors.border),
-            ),
-            title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: costoCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Coste unitario (€)'),
-                    onChanged: (_) => setDlg(() {}),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: pvpCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(labelText: 'Precio PVP (€)'),
-                          onChanged: (_) => setDlg(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: colabCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(labelText: 'Precio Colab. (€)'),
-                          onChanged: (_) => setDlg(() {}),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: _BusinessColors.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _BusinessColors.border),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'PVP: +${_fmtEur(benPvp)} (${pctPvp.toStringAsFixed(1).replaceAll('.', ',')} %)',
-                          style: const TextStyle(color: _BusinessColors.emeraldBright, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Colaborador: +${_fmtEur(benCol)} (${pctCol.toStringAsFixed(1).replaceAll('.', ',')} %)',
-                          style: const TextStyle(color: _BusinessColors.softBlue, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cerrar', style: TextStyle(color: _BusinessColors.softBlue, fontWeight: FontWeight.w600)),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _abrirMenuMas() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _BusinessColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        side: BorderSide(color: _BusinessColors.border),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'ERP Juan v1.2 · Perfil $_rolActual',
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Center(child: Text('Administrador')),
-                    selected: _rolActual == 'Administrador',
-                    selectedColor: _BusinessColors.primaryBlue,
-                    backgroundColor: _BusinessColors.surface,
-                    labelStyle: TextStyle(
-                      color: _rolActual == 'Administrador' ? Colors.white : _BusinessColors.textMuted,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    onSelected: (_) {
-                      Navigator.pop(ctx);
-                      _cambiarRol('Administrador');
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Center(child: Text('Empleado')),
-                    selected: _rolActual == 'Empleado',
-                    selectedColor: _BusinessColors.emerald,
-                    backgroundColor: _BusinessColors.surface,
-                    labelStyle: TextStyle(
-                      color: _rolActual == 'Empleado' ? Colors.white : _BusinessColors.textMuted,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    onSelected: (_) {
-                      Navigator.pop(ctx);
-                      _cambiarRol('Empleado');
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _BusinessColors.emerald,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-                    label: const Text('Nueva Venta', style: TextStyle(fontWeight: FontWeight.bold)),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _abrirNuevaVentaPantalla();
-                    },
-                  ),
-                ),
-                if (_esAdmin) ...[
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _BusinessColors.primaryBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: const Icon(Icons.inventory_rounded, size: 18),
-                      label: const Text('Nueva Compra', style: TextStyle(fontWeight: FontWeight.bold)),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _abrirNuevaCompraDialog();
-                      },
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (_esAdmin) ...[
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.inventory_2_outlined, color: _BusinessColors.softBlue),
-                title: const Text('Inventario & Tarifas', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Productos, precios PVP / Especial Colaborador y stock', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _irAPestana(2, soloStockBajo: false);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.people_alt_outlined, color: _BusinessColors.emeraldBright),
-                title: const Text('Clientes, Colaboradores y Proveedores', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Agenda comercial y tarifas asignadas', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _irAPestana(5);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.calculate_outlined, color: _BusinessColors.amberSoft),
-                title: const Text('Calculadora de Márgenes PVP / Colab', style: TextStyle(color: _BusinessColors.textMain, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Simula precios y beneficios unitarios', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _mostrarCalculadoraMargenes();
-                },
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final pantallasAdmin = [
-      DashboardScreen(
-        key: ValueKey('dash_${_rolActual}_$_refreshTick'),
-        rolActual: _rolActual,
-        onChanged: _notificarCambio,
-        onAbrirMenuMas: _abrirMenuMas,
-        onCambiarRol: _cambiarRol,
-        onNuevaVenta: _abrirNuevaVentaPantalla,
-        onIrPestana: _irAPestana,
-      ),
-      VentasScreen(
-        key: ValueKey('ventas_${_rolActual}_$_refreshTick'),
-        onChanged: _notificarCambio,
-        onNuevaVenta: _abrirNuevaVentaPantalla,
-      ),
-      StockScreen(
-        key: ValueKey('stock_${_rolActual}_$_refreshTick'),
-        esAdmin: _esAdmin,
-        onChanged: _notificarCambio,
-        onNuevaCompra: _abrirNuevaCompraDialog,
-        soloStockBajoInicial: _soloStockBajoInicial,
-      ),
-      CobrosScreen(
-        key: ValueKey('cobros_${_rolActual}_$_refreshTick'),
-        onChanged: _notificarCambio,
-        onNuevaVenta: _abrirNuevaVentaPantalla,
-      ),
-      KardexScreen(
-        key: ValueKey('kardex_${_rolActual}_$_refreshTick'),
-        onChanged: _notificarCambio,
-        onNuevaVenta: _abrirNuevaVentaPantalla,
-        onNuevaCompra: _abrirNuevaCompraDialog,
-        filtroInicial: _filtroKardexInicial,
-      ),
-      ClientesScreen(
-        key: ValueKey('clientes_${_rolActual}_$_refreshTick'),
-        onChanged: _notificarCambio,
-      ),
-    ];
+    final bool esAdmin = _perfilActivo == 'Administrador';
 
-    final pantallasEmpleado = [
-      DashboardScreen(
-        key: ValueKey('dash_emp_$_refreshTick'),
-        rolActual: _rolActual,
-        onChanged: _notificarCambio,
-        onAbrirMenuMas: _abrirMenuMas,
-        onCambiarRol: _cambiarRol,
-        onNuevaVenta: _abrirNuevaVentaPantalla,
-        onIrPestana: _irAPestana,
-      ),
-      VentasScreen(
-        key: ValueKey('ventas_emp_$_refreshTick'),
-        onChanged: _notificarCambio,
-        onNuevaVenta: _abrirNuevaVentaPantalla,
-      ),
-      StockScreen(
-        key: ValueKey('stock_emp_$_refreshTick'),
-        esAdmin: false,
-        onChanged: _notificarCambio,
-        onNuevaCompra: _abrirNuevaCompraDialog,
-        soloStockBajoInicial: _soloStockBajoInicial,
-      ),
-    ];
+    final List<Widget> pages = esAdmin
+        ? [
+            DashboardScreen(perfilActivo: _perfilActivo, onCambiarPerfil: _cambiarPerfil),
+            const VentasScreen(),
+            const StockScreen(),
+            const CobrosScreen(),
+            const KardexScreen(),
+            const AgendaComercialScreen(),
+          ]
+        : [
+            DashboardScreen(perfilActivo: _perfilActivo, onCambiarPerfil: _cambiarPerfil),
+            const VentasScreen(),
+            const StockScreen(),
+          ];
 
-    final pantallas = _esAdmin ? pantallasAdmin : pantallasEmpleado;
-    final safeIndex = _index < pantallas.length ? _index : 0;
+    final List<BottomNavigationBarItem> navItems = esAdmin
+        ? const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
+            BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Ventas'),
+            BottomNavigationBarItem(icon: Icon(Icons.local_offer), label: 'Stock'),
+            BottomNavigationBarItem(icon: Icon(Icons.access_time), label: 'Cobros'),
+            BottomNavigationBarItem(icon: Icon(Icons.swap_vert), label: 'Kardex'),
+            BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Clientes'),
+          ]
+        : const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
+            BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Ventas'),
+            BottomNavigationBarItem(icon: Icon(Icons.local_offer), label: 'Stock'),
+          ];
 
     return Scaffold(
-      body: SafeArea(child: pantallas[safeIndex]),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: _BusinessColors.card,
-          border: Border(top: BorderSide(color: _BusinessColors.border)),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: safeIndex,
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: _BusinessColors.card,
-          selectedItemColor: _BusinessColors.softBlue,
-          unselectedItemColor: _BusinessColors.textMuted,
-          selectedFontSize: 11,
-          unselectedFontSize: 11,
-          onTap: (i) => _irAPestana(i, filtroKardex: 'TODOS', soloStockBajo: false),
-          items: _esAdmin
-              ? const [
-                  BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Inicio'),
-                  BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Ventas'),
-                  BottomNavigationBarItem(icon: Icon(Icons.sell_outlined), label: 'Stock'),
-                  BottomNavigationBarItem(icon: Icon(Icons.schedule_rounded), label: 'Cobros'),
-                  BottomNavigationBarItem(icon: Icon(Icons.swap_vert_rounded), label: 'Kardex'),
-                  BottomNavigationBarItem(icon: Icon(Icons.people_alt_outlined), label: 'Clientes'),
-                ]
-              : const [
-                  BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Inicio'),
-                  BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Ventas'),
-                  BottomNavigationBarItem(icon: Icon(Icons.sell_outlined), label: 'Stock'),
-                ],
-        ),
+      body: SafeArea(child: pages[_selectedIndex]),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: const Color(0xFF0B1120),
+        selectedItemColor: const Color(0xFF3B82F6),
+        unselectedItemColor: Colors.grey,
+        selectedFontSize: 11,
+        unselectedFontSize: 11,
+        items: navItems,
       ),
     );
   }
 }
 
-class DashboardScreen extends StatefulWidget {
-  final String rolActual;
-  final VoidCallback onChanged;
-  final VoidCallback onAbrirMenuMas;
-  final void Function(String nuevoRol) onCambiarRol;
-  final Future<void> Function() onNuevaVenta;
-  final void Function(int idx, {String? filtroKardex, bool? soloStockBajo}) onIrPestana;
+class DashboardScreen extends StatelessWidget {
+  final String perfilActivo;
+  final Function(String) onCambiarPerfil;
 
   const DashboardScreen({
     super.key,
-    required this.rolActual,
-    required this.onChanged,
-    required this.onAbrirMenuMas,
-    required this.onCambiarRol,
-    required this.onNuevaVenta,
-    required this.onIrPestana,
+    required this.perfilActivo,
+    required this.onCambiarPerfil,
   });
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
-}
-
-class _DashboardScreenState extends State<DashboardScreen> {
-  String periodo = 'Este mes';
-  double porCobrar = 0.0;
-  double vencidoMonto = 0.0;
-  int vencidasCount = 0;
-  double ingresos = 0.0;
-  double comprasPeriodo = 0.0;
-  double margenBruto = 0.0;
-  double valorStock = 0.0;
-  int totalProductosCount = 0;
-  int stockBajoCount = 0;
-  int ventasCount = 0;
-  int comprasCount = 0;
-
-  List vencimientos = [];
-  List barrasMeses = [];
-
-  bool get _esAdmin => widget.rolActual == 'Administrador';
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  bool _dentroDePeriodo(String fechaStr, DateTime hoy) {
-    final f = DateTime.tryParse(fechaStr);
-    if (f == null) return true;
-    final fDia = DateTime(f.year, f.month, f.day);
-    final hDia = DateTime(hoy.year, hoy.month, hoy.day);
-    if (periodo == 'Hoy') return fDia == hDia;
-    if (periodo == 'Esta semana') return hDia.difference(fDia).inDays >= 0 && hDia.difference(fDia).inDays <= 7;
-    if (periodo == 'Este año') return f.year == hoy.year;
-    return f.year == hoy.year && f.month == hoy.month;
-  }
-
-  Future<void> _cargar() async {
-    final db = await DatabaseHelper.instance.database;
-    final movs = await db.query('movimientos', orderBy: 'id DESC');
-    final prods = await db.query('productos');
-
-    final ahora = DateTime.now();
-    final hoy = DateTime(ahora.year, ahora.month, ahora.day);
-
-    double pCob = 0.0;
-    double vMonto = 0.0;
-    int vCnt = 0;
-    double ing = 0.0;
-    double comp = 0.0;
-    double mBruto = 0.0;
-    int vOps = 0;
-    int cOps = 0;
-    List listaVenc = [];
-
-    List clavesMes = [];
-    List etiquetas = [];
-    const mesesNom = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    for (int i = 5; i >= 0; i--) {
-      final d = DateTime(ahora.year, ahora.month - i, 1);
-      clavesMes.add('${d.year}-${d.month.toString().padLeft(2, '0')}');
-      etiquetas.add(mesesNom[d.month - 1]);
-    }
-    List ventasMes = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-    List comprasMes = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-
-    for (var m in movs) {
-      final tipo = (m['tipo'] ?? '').toString().toUpperCase();
-      final imp = (m['importe'] as num?)?.toDouble() ?? 0.0;
-      final costo = (m['costo_total'] as num?)?.toDouble() ?? 0.0;
-      final estado = (m['estado_cobro'] ?? 'Pagado').toString();
-      final fechaStr = (m['fecha'] ?? '').toString();
-      final vencStr = (m['fecha_vencimiento'] ?? fechaStr).toString();
-
-      if (tipo == 'VENTA' || tipo == 'COBRO') {
-        if (estado == 'Pendiente') {
-          pCob += imp;
-          final fv = DateTime.tryParse(vencStr) ?? hoy;
-          final diasRetraso = hoy.difference(DateTime(fv.year, fv.month, fv.day)).inDays;
-          if (diasRetraso > 0) {
-            vCnt++;
-            vMonto += imp;
-          }
-          final copia = Map.from(m);
-          copia['dias_retraso'] = diasRetraso;
-          listaVenc.add(copia);
-        } else {
-          if (_dentroDePeriodo(fechaStr, hoy)) {
-            ing += imp;
-            mBruto += (imp - costo);
-            vOps++;
-          }
-          for (int k = 0; k < 6; k++) {
-            if (fechaStr.startsWith(clavesMes[k])) {
-              ventasMes[k] = (ventasMes[k] as double) + imp;
-            }
-          }
-        }
-      } else if (tipo == 'COMPRA') {
-        if (_dentroDePeriodo(fechaStr, hoy)) {
-          comp += imp;
-          cOps++;
-        }
-        for (int k = 0; k < 6; k++) {
-          if (fechaStr.startsWith(clavesMes[k])) {
-            comprasMes[k] = (comprasMes[k] as double) + imp;
-          }
-        }
-      }
-    }
-
-    double vStock = 0.0;
-    int sBajo = 0;
-    for (var pr in prods) {
-      final st = (pr['stock'] as int?) ?? 0;
-      final cUnit = (pr['costo_compra'] as num?)?.toDouble() ?? 0.0;
-      vStock += st * cUnit;
-      if (st <= 3) sBajo++;
-    }
-
-    List barras = [];
-    for (int k = 0; k < 6; k++) {
-      barras.add({
-        'mes': etiquetas[k],
-        'ventas': ventasMes[k],
-        'compras': comprasMes[k],
-      });
-    }
-
-    if (mounted) {
-      setState(() {
-        porCobrar = pCob;
-        vencidoMonto = vMonto;
-        vencidasCount = vCnt;
-        ingresos = ing;
-        comprasPeriodo = comp;
-        margenBruto = mBruto;
-        valorStock = vStock;
-        totalProductosCount = prods.length;
-        stockBajoCount = sBajo;
-        ventasCount = vOps;
-        comprasCount = cOps;
-        vencimientos = listaVenc;
-        barrasMeses = barras;
-      });
-    }
-  }
-
-  Future<void> _exportarResumen() async {
-    final sb = StringBuffer();
-    sb.writeln('ERP JUAN v1.2 — Panel ($periodo)');
-    sb.writeln('Ingresos: ${_fmtEur(ingresos)}');
-    sb.writeln('Por cobrar: ${_fmtEur(porCobrar)} ($vencidasCount vencidas)');
-    sb.writeln('Compras: ${_fmtEur(comprasPeriodo)} ($comprasCount órdenes)');
-    sb.writeln('Valor stock: ${_fmtEur(valorStock)} ($stockBajoCount stock bajo)');
-    sb.writeln('Margen bruto: ${_fmtEur(margenBruto)}');
-    await Clipboard.setData(ClipboardData(text: sb.toString()));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: _BusinessColors.emerald, content: Text('Resumen copiado al portapapeles')),
-      );
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final ahora = DateTime.now();
-    final horaFmt = '${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}:${ahora.second.toString().padLeft(2, '0')}';
+    final bool esAdmin = perfilActivo == 'Administrador';
 
-    double maxBarra = 100.0;
-    for (var b in barrasMeses) {
-      final bv = (b['ventas'] as double);
-      final bc = (b['compras'] as double);
-      if (bv > maxBarra) maxBarra = bv;
-      if (bc > maxBarra) maxBarra = bc;
-    }
-
-    return RefreshIndicator(
-      onRefresh: _cargar,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        children: [
-          Row(
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Cabecera con selector de Perfil activo (separado de Clientes)
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
-                  color: _esAdmin ? _BusinessColors.primaryBlue : _BusinessColors.emerald,
-                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFF3B82F6),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                alignment: Alignment.center,
-                child: Text(
-                  _esAdmin ? 'J' : 'E',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+                child: const Text('ERP', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -811,2579 +274,487 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     Row(
                       children: [
-                        const Text('ERP Juan', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+                        const Text(
+                          'ERP Juan',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _BusinessColors.surface,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: _BusinessColors.primaryBlue.withOpacity(0.45)),
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text('v1.2', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _BusinessColors.softBlue)),
+                          child: const Text('v1.2', style: TextStyle(fontSize: 11)),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Icon(Icons.circle, size: 8, color: Color(0xFF10B981)),
                         const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: () => widget.onCambiarRol(_esAdmin ? 'Empleado' : 'Administrador'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _BusinessColors.surface,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: _esAdmin
-                                    ? _BusinessColors.softBlue.withOpacity(0.45)
-                                    : _BusinessColors.emeraldBright.withOpacity(0.45),
-                              ),
-                            ),
-                            child: Text(
-                              widget.rolActual,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _esAdmin ? _BusinessColors.softBlue : _BusinessColors.emeraldBright,
-                              ),
-                            ),
-                          ),
+                        Text(
+                          esAdmin ? 'Modo Administrador' : 'Modo Empleado',
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _esAdmin
-                          ? 'EN VIVO $horaFmt · $ventasCount ventas · $comprasCount compras'
-                          : 'PERFIL EMPLEADO · Ventas y existencias',
-                      style: const TextStyle(fontSize: 11, color: _BusinessColors.emeraldBright, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
               ),
-              IconButton(icon: const Icon(Icons.refresh_rounded, color: _BusinessColors.textMuted), onPressed: _cargar),
-              GestureDetector(
-                onTap: widget.onAbrirMenuMas,
+              DropdownButtonHideUnderline(
                 child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.add, color: Colors.white, size: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: DropdownButton<String>(
+                    value: perfilActivo,
+                    dropdownColor: const Color(0xFF1E293B),
+                    style: const TextStyle(fontSize: 12, color: Colors.white),
+                    items: const [
+                      DropdownMenuItem(value: 'Administrador', child: Text('Admin')),
+                      DropdownMenuItem(value: 'Empleado', child: Text('Empleado')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) onCambiarPerfil(val);
+                    },
+                  ),
                 ),
               ),
             ],
           ),
-
-          if (!_esAdmin) ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _BusinessColors.emerald,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: const Icon(Icons.add_shopping_cart_rounded),
-                label: const Text('+ Registrar Nueva Venta', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                onPressed: () async {
-                  await widget.onNuevaVenta();
-                  _cargar();
-                  widget.onChanged();
-                },
+        ),
+        const SizedBox(height: 16),
+        if (esAdmin) ...[
+          Row(
+            children: [
+              Expanded(
+                child: _metricCard('Por Cobrar', '€ 0,00', 'Cuentas pendientes', Icons.schedule, Colors.orange),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _metricCard('Ingresos', '€ 0,00', 'Ventas totales', Icons.euro, const Color(0xFF10B981)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _metricCard('Valor Stock', '€ 0,00', 'Inventario activo', Icons.inventory_2, const Color(0xFF3B82F6)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _metricCard('Stock Bajo', '0 Prod.', 'Revisar reposición', Icons.warning_amber, Colors.amber),
+              ),
+            ],
+          ),
+        ] else ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(14),
             ),
-            const SizedBox(height: 14),
-            Row(
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Productos Activos',
-                    valor: '$totalProductosCount Prod.',
-                    subtitulo: 'Consultar existencias',
-                    subColor: _BusinessColors.softBlue,
-                    badgeAccion: 'Stock',
-                    accentColor: _BusinessColors.primaryBlue,
-                    onTap: () => widget.onIrPestana(2, soloStockBajo: false),
-                  ),
+                Text(
+                  'Acceso Operativo (Empleado)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Stock Bajo',
-                    valor: '$stockBajoCount Prod.',
-                    subtitulo: 'Aviso de reposición',
-                    subColor: _BusinessColors.amberSoft,
-                    badgeAccion: 'Ver',
-                    accentColor: _BusinessColors.amberSoft,
-                    onTap: () => widget.onIrPestana(2, soloStockBajo: true),
-                  ),
+                SizedBox(height: 8),
+                Text(
+                  'Puedes registrar ventas y consultar el inventario disponible desde la barra inferior.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
             ),
-          ] else ...[
-            const SizedBox(height: 12),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: ['Este mes', 'Esta semana', 'Hoy', 'Este año'].map((pItem) {
-                  final sel = periodo == pItem;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(pItem),
-                      selected: sel,
-                      selectedColor: _BusinessColors.primaryBlue,
-                      backgroundColor: _BusinessColors.card,
-                      side: BorderSide(color: sel ? _BusinessColors.primaryBlue : _BusinessColors.border),
-                      labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12),
-                      onSelected: (_) {
-                        setState(() => periodo = pItem);
-                        _cargar();
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => widget.onIrPestana(3),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A151E),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _BusinessColors.danger.withOpacity(0.35)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline_rounded, color: _BusinessColors.danger, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '$vencidasCount Deuda(s) Vencida(s) · Cobrar ${_fmtEur(porCobrar)}',
-                        style: const TextStyle(fontSize: 12, color: _BusinessColors.textMain, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: _exportarResumen,
-                      child: const Row(
-                        children: [
-                          Icon(Icons.download_rounded, color: _BusinessColors.softBlue, size: 16),
-                          SizedBox(width: 4),
-                          Text('Exportar', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Por Cobrar',
-                    valor: _fmtEur(porCobrar),
-                    subtitulo: '$vencidasCount Vencidas (${_fmtEur(vencidoMonto)})',
-                    subColor: _BusinessColors.danger,
-                    badgeAccion: 'Cobros',
-                    accentColor: _BusinessColors.danger,
-                    onTap: () => widget.onIrPestana(3),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Ingresos',
-                    valor: _fmtEur(ingresos),
-                    subtitulo: '$ventasCount ventas cobradas',
-                    subColor: _BusinessColors.emeraldBright,
-                    badgeAccion: 'Ventas',
-                    accentColor: _BusinessColors.emerald,
-                    onTap: () => widget.onIrPestana(1),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Valor Stock',
-                    valor: _fmtEur(valorStock),
-                    subtitulo: 'En inventario activo',
-                    subColor: _BusinessColors.textMuted,
-                    badgeAccion: 'Stock',
-                    accentColor: _BusinessColors.primaryBlue,
-                    onTap: () => widget.onIrPestana(2, soloStockBajo: false),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Stock Bajo',
-                    valor: '$stockBajoCount Prod.',
-                    subtitulo: 'Requieren reposición',
-                    subColor: _BusinessColors.amberSoft,
-                    badgeAccion: 'Reponer',
-                    accentColor: _BusinessColors.amberSoft,
-                    onTap: () => widget.onIrPestana(2, soloStockBajo: true),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Margen Bruto',
-                    valor: _fmtEur(margenBruto),
-                    subtitulo: 'Ventas - Coste producto',
-                    subColor: _BusinessColors.softBlue,
-                    badgeAccion: 'Kardex',
-                    accentColor: _BusinessColors.softBlue,
-                    onTap: () => widget.onIrPestana(4, filtroKardex: 'VENTA'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _tarjetaKpi(
-                    titulo: 'Compras',
-                    valor: _fmtEur(comprasPeriodo),
-                    subtitulo: '$comprasCount órdenes proveedor',
-                    subColor: _BusinessColors.amberSoft,
-                    badgeAccion: 'Compras',
-                    accentColor: _BusinessColors.amber,
-                    onTap: () => widget.onIrPestana(4, filtroKardex: 'COMPRA'),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _BusinessColors.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _BusinessColors.amber.withOpacity(0.4)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.notifications_none_rounded, color: _BusinessColors.amberSoft, size: 19),
-                          SizedBox(width: 8),
-                          Text('Próximos Vencimientos de Cobro', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _BusinessColors.amberSoft)),
-                        ],
-                      ),
-                      GestureDetector(
-                        onTap: () => widget.onIrPestana(3),
-                        child: const Text('Ver Todo', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (vencimientos.isEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10)),
-                      child: const Text('No hay cobros pendientes.', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-                    )
-                  else
-                    ...vencimientos.take(3).map((v) {
-                      final dias = (v['dias_retraso'] as int?) ?? 0;
-                      final badge = dias > 0 ? 'Venció hace $dias días' : (dias == 0 ? 'Vence hoy' : 'Vence ${_fechaCortaEs(v['fecha_vencimiento'].toString())}');
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(color: _BusinessColors.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: _BusinessColors.border)),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('${v['cliente_proveedor']}', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
-                                  Text('${v['producto_nombre']} · $badge', style: TextStyle(color: dias > 0 ? _BusinessColors.danger : _BusinessColors.textMuted, fontSize: 11)),
-                                ],
-                              ),
-                            ),
-                            Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
-                          ],
-                        ),
-                      );
-                    }),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _BusinessColors.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _BusinessColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Ventas vs Compras — últimos 6 meses', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                  const SizedBox(height: 3),
-                  const Text('Se actualiza al crear una venta o compra.', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted)),
-                  const SizedBox(height: 14),
-                  ...barrasMeses.map((b) {
-                    final mes = b['mes'].toString();
-                    final vVal = (b['ventas'] as double);
-                    final cVal = (b['compras'] as double);
-                    final vFrac = (vVal / maxBarra).clamp(0.02, 1.0);
-                    final cFrac = (cVal / maxBarra).clamp(0.02, 1.0);
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          SizedBox(width: 36, child: Text(mes, style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 12, fontWeight: FontWeight.w600))),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                FractionallySizedBox(
-                                  widthFactor: vFrac,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(color: _BusinessColors.primaryBlue, borderRadius: BorderRadius.circular(6)),
-                                    child: Text('Ventas ${vVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                FractionallySizedBox(
-                                  widthFactor: cFrac,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(color: _BusinessColors.amber, borderRadius: BorderRadius.circular(6)),
-                                    child: Text('Compras ${cVal.toStringAsFixed(0)} €', overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 
-  Widget _tarjetaKpi({
-    required String titulo,
-    required String valor,
-    required String subtitulo,
-    required Color subColor,
-    required String badgeAccion,
-    required Color accentColor,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: _BusinessColors.card,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
+  Widget _metricCard(String title, String value, String subtitle, IconData icon, Color accent) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _BusinessColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(titulo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _BusinessColors.textMuted)),
-                  Text('$badgeAccion →', style: TextStyle(fontSize: 11, color: accentColor, fontWeight: FontWeight.w600)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(valor, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-              const SizedBox(height: 5),
-              Text(subtitulo, style: TextStyle(fontSize: 11, color: subColor, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+              Text(title, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Icon(icon, size: 16, color: accent),
             ],
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(subtitle, style: TextStyle(color: accent, fontSize: 11)),
+        ],
       ),
     );
   }
 }
 
-Future mostrarDialogoContacto(BuildContext context, {Map? contactoExistente, String tipoPorDefecto = 'Cliente Final'}) async {
-  final nombreCtrl = TextEditingController(text: contactoExistente?['nombre']?.toString() ?? '');
-  final telCtrl = TextEditingController(text: contactoExistente?['telefono']?.toString() ?? '');
-  final notasCtrl = TextEditingController(text: contactoExistente?['notas']?.toString() ?? '');
-  String tipoSel = contactoExistente?['tipo']?.toString() ?? tipoPorDefecto;
-  if (!['Cliente Final', 'Colaborador', 'Proveedor'].contains(tipoSel)) {
-    tipoSel = 'Cliente Final';
-  }
-  String rolSel = contactoExistente?['rol']?.toString() ?? 'Empleado';
-  if (!['Administrador', 'Empleado'].contains(rolSel)) {
-    rolSel = 'Empleado';
-  }
-
-  return await showDialog(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setDlg) => AlertDialog(
-        backgroundColor: _BusinessColors.card,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
-        title: Text(
-          contactoExistente == null ? 'Agregar contacto' : 'Editar contacto',
-          style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre o empresa')),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: tipoSel,
-                isExpanded: true,
-                dropdownColor: _BusinessColors.surface,
-                decoration: const InputDecoration(labelText: 'Categoría'),
-                items: const [
-                  DropdownMenuItem(value: 'Cliente Final', child: Text('Cliente (Tarifa PVP)')),
-                  DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador (Tarifa Especial)')),
-                  DropdownMenuItem(value: 'Proveedor', child: Text('Proveedor (Compras / Stock)')),
-                ],
-                onChanged: (v) => setDlg(() => tipoSel = v!),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: rolSel,
-                isExpanded: true,
-                dropdownColor: _BusinessColors.surface,
-                decoration: const InputDecoration(labelText: 'Perfil / Rol en ERP'),
-                items: const [
-                  DropdownMenuItem(value: 'Administrador', child: Text('Administrador (Control total)')),
-                  DropdownMenuItem(value: 'Empleado', child: Text('Empleado (Ventas y stock)')),
-                ],
-                onChanged: (v) => setDlg(() => rolSel = v!),
-              ),
-              const SizedBox(height: 10),
-              TextField(controller: telCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Teléfono / WhatsApp')),
-              const SizedBox(height: 10),
-              TextField(controller: notasCtrl, decoration: const InputDecoration(labelText: 'Notas / Dirección / Referencia')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
-            onPressed: () async {
-              final nom = nombreCtrl.text.trim();
-              if (nom.isEmpty) return;
-              final db = await DatabaseHelper.instance.database;
-              final data = {
-                'nombre': nom,
-                'tipo': tipoSel,
-                'rol': rolSel,
-                'telefono': telCtrl.text.trim(),
-                'notas': notasCtrl.text.trim(),
-              };
-              if (contactoExistente == null) {
-                await db.insert('clientes', data, conflictAlgorithm: ConflictAlgorithm.replace);
-              } else {
-                await db.update('clientes', data, where: 'id = ?', whereArgs: [contactoExistente['id']]);
-              }
-              if (ctx.mounted) Navigator.pop(ctx, data);
-            },
-            child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-Future<bool> mostrarDialogoCompra(BuildContext context) async {
-  final db = await DatabaseHelper.instance.database;
-  final productos = await db.query('productos', orderBy: 'nombre ASC');
-  final todosContactosDb = await db.query('clientes', orderBy: 'nombre ASC');
-
-  if (productos.isEmpty) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Primero crea un producto en Stock para registrar compras.')),
-      );
-    }
-    return false;
-  }
-
-  Map prodSel = productos.first;
-  bool soloProveedores = true;
-
-  List construirListaContactos(bool filtrarSoloProv) {
-    final filtrados = filtrarSoloProv
-        ? todosContactosDb.where((e) => (e['tipo'] ?? '') == 'Proveedor').toList()
-        : todosContactosDb;
-    final nombres = [
-      'Proveedor General',
-      ...filtrados.map((e) => e['nombre'].toString()).where((n) => n != 'Proveedor General'),
-    ];
-    final pvProd = (prodSel['proveedor'] ?? '').toString().trim();
-    if (pvProd.isNotEmpty && !nombres.contains(pvProd)) {
-      nombres.add(pvProd);
-    }
-    return nombres;
-  }
-
-  List listaProvs = construirListaContactos(soloProveedores);
-  final provInicialProd = (prodSel['proveedor'] ?? '').toString().trim();
-  String provSeleccionado = (provInicialProd.isNotEmpty && listaProvs.contains(provInicialProd))
-      ? provInicialProd
-      : 'Proveedor General';
-
-  final cantCtrl = TextEditingController(text: '1');
-  final costoUnitCtrl = TextEditingController(
-    text: ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2).replaceAll('.', ','),
-  );
-  final totalCtrl = TextEditingController(text: costoUnitCtrl.text);
-  String metodoPago = 'Transferencia';
-  String fechaIso = DateTime.now().toIso8601String().split('T')[0];
-
-  double parseNum(String s) => double.tryParse(s.replaceAll(',', '.').trim()) ?? 0.0;
-
-  void recalcularTotal() {
-    final c = int.tryParse(cantCtrl.text.trim()) ?? 1;
-    final u = parseNum(costoUnitCtrl.text);
-    totalCtrl.text = (c * u).toStringAsFixed(2).replaceAll('.', ',');
-  }
-
-  if (!context.mounted) return false;
-
-  final resultado = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setDlg) => AlertDialog(
-        backgroundColor: _BusinessColors.card,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: const BorderSide(color: _BusinessColors.border),
-        ),
-        title: const Text('Registrar Nueva Compra', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DropdownButtonFormField<int>(
-                value: prodSel['id'] as int,
-                isExpanded: true,
-                dropdownColor: _BusinessColors.surface,
-                decoration: const InputDecoration(labelText: 'Producto del Stock'),
-                items: productos
-                    .map((pr) => DropdownMenuItem<int>(
-                          value: pr['id'] as int,
-                          child: Text('${pr['nombre']} (Stock: ${pr['stock']})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                        ))
-                    .toList(),
-                onChanged: (id) {
-                  if (id == null) return;
-                  setDlg(() {
-                    prodSel = productos.firstWhere((e) => e['id'] == id);
-                    final pv = (prodSel['proveedor'] ?? '').toString().trim();
-                    if (pv.isNotEmpty) {
-                      if (!listaProvs.contains(pv)) listaProvs.add(pv);
-                      provSeleccionado = pv;
-                    }
-                    costoUnitCtrl.text = ((prodSel['costo_compra'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2).replaceAll('.', ',');
-                    recalcularTotal();
-                  });
-                },
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: listaProvs.contains(provSeleccionado) ? provSeleccionado : 'Proveedor General',
-                isExpanded: true,
-                dropdownColor: _BusinessColors.surface,
-                decoration: InputDecoration(
-                  labelText: soloProveedores ? 'Proveedor' : 'Proveedor / Contacto',
-                ),
-                items: listaProvs
-                    .map((nom) => DropdownMenuItem<String>(
-                          value: nom,
-                          child: Text(nom, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                        ))
-                    .toList(),
-                onChanged: (v) {
-                  if (v != null) setDlg(() => provSeleccionado = v);
-                },
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton.icon(
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                    icon: const Icon(Icons.add_business_outlined, size: 16, color: _BusinessColors.softBlue),
-                    label: const Text('+ Nuevo proveedor', style: TextStyle(fontSize: 12, color: _BusinessColors.softBlue)),
-                    onPressed: () async {
-                      final creado = await mostrarDialogoContacto(ctx, tipoPorDefecto: 'Proveedor');
-                      if (creado != null) {
-                        final frescos = await db.query('clientes', orderBy: 'nombre ASC');
-                        todosContactosDb
-                          ..clear()
-                          ..addAll(frescos);
-                        setDlg(() {
-                          listaProvs = construirListaContactos(soloProveedores);
-                          final nomNuevo = creado['nombre'].toString();
-                          if (!listaProvs.contains(nomNuevo)) listaProvs.add(nomNuevo);
-                          provSeleccionado = nomNuevo;
-                        });
-                      }
-                    },
-                  ),
-                  TextButton(
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                    onPressed: () {
-                      setDlg(() {
-                        soloProveedores = !soloProveedores;
-                        listaProvs = construirListaContactos(soloProveedores);
-                        if (!listaProvs.contains(provSeleccionado)) {
-                          provSeleccionado = 'Proveedor General';
-                        }
-                      });
-                    },
-                    child: Text(
-                      soloProveedores ? 'Ver toda la agenda' : 'Solo proveedores',
-                      style: const TextStyle(fontSize: 11, color: _BusinessColors.textMuted),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: cantCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Cantidad'),
-                      onChanged: (_) => setDlg(recalcularTotal),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: costoUnitCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Coste unit. (€)'),
-                      onChanged: (_) => setDlg(recalcularTotal),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: totalCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Total compra (€)'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: metodoPago,
-                      isExpanded: true,
-                      dropdownColor: _BusinessColors.surface,
-                      decoration: const InputDecoration(labelText: 'Método'),
-                      items: const [
-                        DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 'Bizum', child: Text('Bizum', style: TextStyle(fontSize: 12))),
-                      ],
-                      onChanged: (v) => setDlg(() => metodoPago = v!),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              InkWell(
-                onTap: () async {
-                  final inicial = DateTime.tryParse(fechaIso) ?? DateTime.now();
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: inicial,
-                    firstDate: DateTime(2024),
-                    lastDate: DateTime(2032),
-                  );
-                  if (picked != null) {
-                    setDlg(() => fechaIso = picked.toIso8601String().split('T')[0]);
-                  }
-                },
-                borderRadius: BorderRadius.circular(10),
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Fecha de compra'),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_fechaCortaEs(fechaIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
-                      const Icon(Icons.calendar_today_outlined, size: 16, color: _BusinessColors.textMuted),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _BusinessColors.primaryBlue,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () async {
-              final cant = int.tryParse(cantCtrl.text.trim()) ?? 1;
-              final unit = parseNum(costoUnitCtrl.text);
-              final total = parseNum(totalCtrl.text) > 0 ? parseNum(totalCtrl.text) : (cant * unit);
-              final prov = provSeleccionado.trim().isEmpty ? 'Proveedor General' : provSeleccionado.trim();
-
-              await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
-
-              final stActual = (prodSel['stock'] as int?) ?? 0;
-              await db.update(
-                'productos',
-                {'stock': stActual + cant, 'costo_compra': unit > 0 ? unit : (prodSel['costo_compra'] ?? 0.0), 'proveedor': prov},
-                where: 'id = ?',
-                whereArgs: [prodSel['id']],
-              );
-
-              await db.insert('movimientos', {
-                'tipo': 'COMPRA',
-                'producto_id': prodSel['id'],
-                'producto_nombre': prodSel['nombre'],
-                'cliente_proveedor': prov,
-                'tarifa': 'Coste Proveedor',
-                'cantidad': cant,
-                'precio_unitario': cant > 0 ? total / cant : unit,
-                'importe': total,
-                'costo_total': total,
-                'metodo_pago': metodoPago,
-                'estado_cobro': 'Pagado',
-                'notas': '',
-                'fecha': fechaIso,
-                'fecha_vencimiento': fechaIso,
-              });
-
-              if (ctx.mounted) Navigator.pop(ctx, true);
-            },
-            child: const Text('Guardar compra', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  return resultado == true;
-}
-
-class NuevaVentaScreen extends StatefulWidget {
-  const NuevaVentaScreen({super.key});
+class AgendaComercialScreen extends StatefulWidget {
+  const AgendaComercialScreen({super.key});
 
   @override
-  State<NuevaVentaScreen> createState() => _NuevaVentaScreenState();
+  State<AgendaComercialScreen> createState() => _AgendaComercialScreenState();
 }
 
-class _LineaVentaDraft {
-  Map? producto;
-  final TextEditingController cantCtrl;
-  final TextEditingController precioCtrl;
-
-  _LineaVentaDraft({this.producto, String cant = '1', String precio = '0,00'})
-      : cantCtrl = TextEditingController(text: cant),
-        precioCtrl = TextEditingController(text: precio);
-
-  void dispose() {
-    cantCtrl.dispose();
-    precioCtrl.dispose();
-  }
-}
-
-class _NuevaVentaScreenState extends State<NuevaVentaScreen> {
-  List productos = [];
-  List clientes = [];
-  String clienteSeleccionado = 'Cliente General';
-  String fechaIso = DateTime.now().toIso8601String().split('T')[0];
-  String fechaVencIso = DateTime.now().add(const Duration(days: 15)).toIso8601String().split('T')[0];
-
-  final List<_LineaVentaDraft> lineas = [];
-  final descuentoCtrl = TextEditingController(text: '0');
-  final ivaCtrl = TextEditingController(text: '21');
-  final notasCtrl = TextEditingController();
-  String metodoPago = 'Efectivo';
-  bool cobradoEnElActo = true;
-  bool cargando = true;
-  String? errorCarga;
+class _AgendaComercialScreenState extends State<AgendaComercialScreen> {
+  String _filtroCategoria = 'Todos';
+  String _busqueda = '';
+  List> _contactos = [];
+  int _totalTodos = 0;
+  int _totalClientes = 0;
+  int _totalColaboradores = 0;
+  int _totalProveedores = 0;
 
   @override
   void initState() {
     super.initState();
-    _cargarDatos();
+    _cargarContactos();
   }
 
-  @override
-  void dispose() {
-    for (var l in lineas) {
-      l.dispose();
-    }
-    descuentoCtrl.dispose();
-    ivaCtrl.dispose();
-    notasCtrl.dispose();
-    super.dispose();
-  }
+  Future<void> _cargarContactos() async {
+    final todos = await DatabaseHelper.instance.getContactos();
+    final filtrados = await DatabaseHelper.instance.getContactos(
+      categoria: _filtroCategoria,
+      query: _busqueda,
+    );
 
-  double _precioSegunContacto(Map pr) {
-    final esColab = clienteSeleccionado.toLowerCase().contains('colaborador') ||
-        clientes.any((c) => c['nombre'] == clienteSeleccionado && (c['tipo'] ?? '').toString().toLowerCase().contains('colab'));
-    if (esColab) {
-      return (pr['precio_colaborador'] as num?)?.toDouble() ?? 0.0;
-    }
-    return (pr['precio_pvp'] as num?)?.toDouble() ?? 0.0;
-  }
-
-  Future<void> _cargarDatos() async {
-    try {
-      final db = await DatabaseHelper.instance.database;
-      final prods = await db.query('productos', orderBy: 'nombre ASC');
-      final todos = await db.query('clientes', orderBy: 'nombre ASC');
-      final clis = todos.where((c) => (c['tipo'] ?? 'Cliente Final') != 'Proveedor').toList();
-
-      if (!mounted) return;
-      setState(() {
-        productos = prods;
-        clientes = clis;
-        if (lineas.isEmpty && prods.isNotEmpty) {
-          final primero = prods.first;
-          lineas.add(_LineaVentaDraft(
-            producto: primero,
-            cant: '1',
-            precio: _precioSegunContacto(primero).toStringAsFixed(2).replaceAll('.', ','),
-          ));
-        }
-        cargando = false;
-        errorCarga = null;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        cargando = false;
-        errorCarga = e.toString();
-      });
-    }
-  }
-
-  void _actualizarPreciosPorCliente() {
-    for (var l in lineas) {
-      if (l.producto != null) {
-        final pUnit = _precioSegunContacto(l.producto!);
-        l.precioCtrl.text = pUnit.toStringAsFixed(2).replaceAll('.', ',');
-      }
-    }
-    setState(() {});
-  }
-
-  void _anadirLinea() {
-    if (productos.isEmpty) return;
-    final pr = productos.first;
+    if (!mounted) return;
     setState(() {
-      lineas.add(_LineaVentaDraft(
-        producto: pr,
-        cant: '1',
-        precio: _precioSegunContacto(pr).toStringAsFixed(2).replaceAll('.', ','),
-      ));
+      _contactos = filtrados;
+      _totalTodos = todos.length;
+      _totalClientes = todos.where((c) => c['categoria'] == 'Cliente').length;
+      _totalColaboradores = todos.where((c) => c['categoria'] == 'Colaborador').length;
+      _totalProveedores = todos.where((c) => c['categoria'] == 'Proveedor').length;
     });
   }
 
-  Future<void> _dialogoNuevoContacto() async {
-    final creado = await mostrarDialogoContacto(context, tipoPorDefecto: 'Cliente Final');
-    if (creado != null) {
-      await _cargarDatos();
-      if (creado['tipo'] != 'Proveedor') {
-        setState(() {
-          clienteSeleccionado = creado['nombre'].toString();
-          _actualizarPreciosPorCliente();
-        });
-      }
-    }
-  }
+  void _mostrarDialogoAgregarContacto() {
+    final nombreCtrl = TextEditingController();
+    final telefonoCtrl = TextEditingController();
+    final notasCtrl = TextEditingController();
+    String categoriaSeleccionada = 'Cliente';
 
-  Future<void> _elegirFecha(bool esVencimiento) async {
-    final baseStr = esVencimiento ? fechaVencIso : fechaIso;
-    final inicial = DateTime.tryParse(baseStr) ?? DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: inicial,
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2032),
-    );
-    if (picked != null) {
-      final iso = picked.toIso8601String().split('T')[0];
-      setState(() {
-        if (esVencimiento) {
-          fechaVencIso = iso;
-        } else {
-          fechaIso = iso;
-        }
-      });
-    }
-  }
-
-  double _parseNum(String s) => double.tryParse(s.replaceAll(',', '.').trim()) ?? 0.0;
-
-  double get _subtotalBruto {
-    double sum = 0.0;
-    for (var l in lineas) {
-      final c = int.tryParse(l.cantCtrl.text.trim()) ?? 0;
-      final p = _parseNum(l.precioCtrl.text);
-      sum += c * p;
-    }
-    return sum;
-  }
-
-  double get _descuento => _parseNum(descuentoCtrl.text);
-  double get _baseImponible => (_subtotalBruto - _descuento) < 0 ? 0.0 : (_subtotalBruto - _descuento);
-  double get _ivaPct => _parseNum(ivaCtrl.text);
-  double get _importeIva => _baseImponible * (_ivaPct / 100.0);
-  double get _totalFinal => _baseImponible + _importeIva;
-
-  double get _margenEstimado {
-    double costoLineas = 0.0;
-    for (var l in lineas) {
-      final c = int.tryParse(l.cantCtrl.text.trim()) ?? 0;
-      final costoU = (l.producto?['costo_compra'] as num?)?.toDouble() ?? 0.0;
-      costoLineas += c * costoU;
-    }
-    return _baseImponible - costoLineas;
-  }
-
-  Future<void> _guardarVenta() async {
-    if (lineas.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Añade al menos una línea de producto')));
-      return;
-    }
-
-    final db = await DatabaseHelper.instance.database;
-    final matchCli = clientes.where((c) => c['nombre'] == clienteSeleccionado).toList();
-    final tipoCli = matchCli.isNotEmpty ? (matchCli.first['tipo'] ?? 'Cliente Final').toString() : 'Cliente Final';
-    await DatabaseHelper.instance.asegurarContacto(clienteSeleccionado, tipoCli);
-
-    final estadoCobro = cobradoEnElActo ? 'Pagado' : 'Pendiente';
-    final vencFinal = cobradoEnElActo ? fechaIso : fechaVencIso;
-    final factorDesc = _subtotalBruto > 0 ? (_baseImponible / _subtotalBruto) : 1.0;
-
-    for (var l in lineas) {
-      final pr = l.producto;
-      if (pr == null) continue;
-      final cant = int.tryParse(l.cantCtrl.text.trim()) ?? 1;
-      final precioU = _parseNum(l.precioCtrl.text);
-      final impLinea = (cant * precioU) * factorDesc * (1 + (_ivaPct / 100.0));
-      final costoU = (pr['costo_compra'] as num?)?.toDouble() ?? 0.0;
-
-      final stActual = (pr['stock'] as int?) ?? 0;
-      final stNuevo = (stActual - cant) < 0 ? 0 : (stActual - cant);
-      await db.update('productos', {'stock': stNuevo}, where: 'id = ?', whereArgs: [pr['id']]);
-
-      await db.insert('movimientos', {
-        'tipo': 'VENTA',
-        'producto_id': pr['id'],
-        'producto_nombre': pr['nombre'],
-        'cliente_proveedor': clienteSeleccionado,
-        'tarifa': tipoCli.contains('Colab') ? 'Colaborador' : 'PVP',
-        'cantidad': cant,
-        'precio_unitario': precioU,
-        'importe': impLinea,
-        'costo_total': cant * costoU,
-        'metodo_pago': metodoPago,
-        'estado_cobro': estadoCobro,
-        'notas': notasCtrl.text.trim(),
-        'fecha': fechaIso,
-        'fecha_vencimiento': vencFinal,
-      });
-    }
-
-    if (mounted) Navigator.pop(context, true);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final opcionesCliente = <String>['Cliente General'];
-    for (final c in clientes) {
-      final nom = (c['nombre'] ?? '').toString();
-      if (nom.isNotEmpty && !opcionesCliente.contains(nom)) {
-        opcionesCliente.add(nom);
-      }
-    }
-    if (!opcionesCliente.contains(clienteSeleccionado)) {
-      opcionesCliente.add(clienteSeleccionado);
-    }
-
-    return Scaffold(
-      backgroundColor: _BusinessColors.bg,
-      appBar: AppBar(
-        backgroundColor: _BusinessColors.bg,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: const Text('Nueva venta', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _BusinessColors.textMuted,
-                side: const BorderSide(color: _BusinessColors.border),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Descartar'),
-            ),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: cargando
-            ? const Center(child: CircularProgressIndicator())
-            : errorCarga != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text('Error al cargar: $errorCarga', style: const TextStyle(color: _BusinessColors.danger)),
-                    ),
-                  )
-                : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _BusinessColors.card,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: _BusinessColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Cliente / Colaborador', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                            const SizedBox(height: 6),
-                            DropdownButtonFormField<String>(
-                              value: clienteSeleccionado,
-                              isExpanded: true,
-                              dropdownColor: _BusinessColors.surface,
-                              items: opcionesCliente.map((nom) {
-                                final match = clientes.where((c) => c['nombre'] == nom).toList();
-                                final esCol = match.isNotEmpty && (match.first['tipo'] ?? '') == 'Colaborador';
-                                return DropdownMenuItem<String>(
-                                  value: nom,
-                                  child: Text(
-                                    esCol ? '$nom (Colab.)' : nom,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => clienteSeleccionado = val);
-                                  _actualizarPreciosPorCliente();
-                                }
-                              },
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton(
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: _BusinessColors.textMain,
-                                      backgroundColor: _BusinessColors.surface,
-                                      side: const BorderSide(color: _BusinessColors.border),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                    ),
-                                    onPressed: _dialogoNuevoContacto,
-                                    child: const Text('+ Nuevo contacto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: InkWell(
-                                    onTap: () => _elegirFecha(false),
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: InputDecorator(
-                                      decoration: const InputDecoration(labelText: 'Fecha'),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(_fechaCortaEs(fechaIso), style: const TextStyle(fontSize: 12, color: _BusinessColors.textMain)),
-                                          const Icon(Icons.calendar_today_outlined, size: 15, color: _BusinessColors.textMuted),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _BusinessColors.card,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: _BusinessColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Líneas de producto', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                            const SizedBox(height: 10),
-                            if (productos.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.only(bottom: 10),
-                                child: Text('No hay productos creados. Ve a Stock para añadir productos.', style: TextStyle(color: _BusinessColors.amberSoft, fontSize: 12)),
-                              )
-                            else
-                              ...lineas.asMap().entries.map((entry) {
-                                final idx = entry.key;
-                                final l = entry.value;
-                                final cant = int.tryParse(l.cantCtrl.text.trim()) ?? 0;
-                                final prU = _parseNum(l.precioCtrl.text);
-                                final impL = cant * prU;
-                                final prodIdActual = l.producto?['id'] as int?;
-                                final idsValidos = productos.map((pItem) => pItem['id'] as int).toList();
-                                final valorDropdown = (prodIdActual != null && idsValidos.contains(prodIdActual))
-                                    ? prodIdActual
-                                    : (idsValidos.isNotEmpty ? idsValidos.first : null);
-
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: _BusinessColors.surface,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: _BusinessColors.border),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: DropdownButtonFormField<int>(
-                                              value: valorDropdown,
-                                              isExpanded: true,
-                                              dropdownColor: _BusinessColors.card,
-                                              decoration: InputDecoration(labelText: 'Producto #${idx + 1}'),
-                                              items: productos
-                                                  .map((pItem) => DropdownMenuItem<int>(
-                                                        value: pItem['id'] as int,
-                                                        child: Text('${pItem['nombre']} (Stock: ${pItem['stock']})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                                                      ))
-                                                  .toList(),
-                                              onChanged: (id) {
-                                                if (id == null) return;
-                                                final elegido = productos.firstWhere((e) => e['id'] == id);
-                                                setState(() {
-                                                  l.producto = elegido;
-                                                  l.precioCtrl.text = _precioSegunContacto(elegido).toStringAsFixed(2).replaceAll('.', ',');
-                                                });
-                                              },
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          IconButton(
-                                            icon: const Icon(Icons.close, size: 18, color: _BusinessColors.danger),
-                                            onPressed: () {
-                                              setState(() {
-                                                l.dispose();
-                                                lineas.remove(l);
-                                              });
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextField(
-                                              controller: l.cantCtrl,
-                                              keyboardType: TextInputType.number,
-                                              decoration: const InputDecoration(labelText: 'Cantidad'),
-                                              onChanged: (_) => setState(() {}),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: TextField(
-                                              controller: l.precioCtrl,
-                                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                              decoration: const InputDecoration(labelText: 'Precio (€)'),
-                                              onChanged: (_) => setState(() {}),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.end,
-                                              children: [
-                                                const Text('Importe', style: TextStyle(fontSize: 11, color: _BusinessColors.textMuted)),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  _fmtEur(impL),
-                                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _BusinessColors.emeraldBright),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }),
-                            const SizedBox(height: 4),
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _BusinessColors.textMain,
-                                backgroundColor: _BusinessColors.surface,
-                                side: const BorderSide(color: _BusinessColors.border),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              onPressed: _anadirLinea,
-                              child: const Text('+ Añadir producto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _BusinessColors.card,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: _BusinessColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: descuentoCtrl,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    decoration: const InputDecoration(labelText: 'Descuento (€)'),
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: TextField(
-                                    controller: ivaCtrl,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    decoration: const InputDecoration(labelText: 'IVA %'),
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    value: metodoPago,
-                                    isExpanded: true,
-                                    dropdownColor: _BusinessColors.surface,
-                                    decoration: const InputDecoration(labelText: 'Método'),
-                                    items: const [
-                                      DropdownMenuItem(value: 'Efectivo', child: Text('Efectivo', style: TextStyle(fontSize: 12))),
-                                      DropdownMenuItem(value: 'Bizum', child: Text('Bizum', style: TextStyle(fontSize: 12))),
-                                      DropdownMenuItem(value: 'Transferencia', child: Text('Transferencia', style: TextStyle(fontSize: 12))),
-                                    ],
-                                    onChanged: (v) => setState(() => metodoPago = v!),
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 10),
-
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: cobradoEnElActo,
-                                  activeColor: _BusinessColors.primaryBlue,
-                                  onChanged: (v) => setState(() => cobradoEnElActo = v ?? true),
-                                ),
-                                const Text('Cobrado en el acto', style: TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
-                              ],
-                            ),
-
-                            if (!cobradoEnElActo) ...[
-                              const SizedBox(height: 6),
-                              InkWell(
-                                onTap: () => _elegirFecha(true),
-                                borderRadius: BorderRadius.circular(10),
-                                child: InputDecorator(
-                                  decoration: const InputDecoration(labelText: 'Fecha de vencimiento'),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(_fechaCortaEs(fechaVencIso), style: const TextStyle(fontSize: 13, color: _BusinessColors.textMain)),
-                                      const Icon(Icons.keyboard_arrow_down, size: 18, color: _BusinessColors.textMuted),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-
-                            const SizedBox(height: 10),
-                            TextField(
-                              controller: notasCtrl,
-                              maxLines: 2,
-                              decoration: const InputDecoration(labelText: 'Notas', hintText: 'Observaciones de envío, entrega o cobro...'),
-                            ),
-
-                            const SizedBox(height: 16),
-                            const Divider(color: _BusinessColors.border),
-                            const SizedBox(height: 8),
-
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Subtotal', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
-                                Text(_fmtEur(_baseImponible), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text('IVA ${_ivaPct.toStringAsFixed(0)}%', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
-                                Text(_fmtEur(_importeIva), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 13)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Total', style: TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
-                                Text(_fmtEur(_totalFinal), style: const TextStyle(color: _BusinessColors.textMain, fontSize: 16, fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Margen estimado', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 12)),
-                                Text(_fmtEur(_margenEstimado), style: const TextStyle(color: _BusinessColors.emeraldBright, fontSize: 12, fontWeight: FontWeight.w600)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 18),
-
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _BusinessColors.emerald,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 15),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: _guardarVenta,
-                          child: const Text('Guardar venta', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-      ),
-    );
-  }
-}
-
-class VentasScreen extends StatefulWidget {
-  final VoidCallback onChanged;
-  final Future<void> Function() onNuevaVenta;
-
-  const VentasScreen({super.key, required this.onChanged, required this.onNuevaVenta});
-
-  @override
-  State<VentasScreen> createState() => _VentasScreenState();
-}
-
-class _VentasScreenState extends State<VentasScreen> {
-  List ventas = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final db = await DatabaseHelper.instance.database;
-    final res = await db.query(
-      'movimientos',
-      where: "tipo = 'VENTA' OR tipo = 'COBRO'",
-      orderBy: 'id DESC',
-    );
-    if (mounted) setState(() => ventas = res);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    double totalVentas = 0.0;
-    for (var v in ventas) {
-      totalVentas += (v['importe'] as num?)?.toDouble() ?? 0.0;
-    }
-
-    return Scaffold(
-      backgroundColor: _BusinessColors.bg,
-      appBar: AppBar(
-        backgroundColor: _BusinessColors.bg,
-        title: const Text('Ventas & Cobros', style: TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.emerald, foregroundColor: Colors.white),
-              onPressed: () async {
-                await widget.onNuevaVenta();
-                _cargar();
-                widget.onChanged();
-              },
-              child: const Text('+ Nueva venta', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: _BusinessColors.border)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Total registrado', style: TextStyle(color: _BusinessColors.textMuted)),
-                Text(_fmtEur(totalVentas), style: const TextStyle(color: _BusinessColors.emeraldBright, fontSize: 18, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ventas.isEmpty
-                ? const Center(child: Text('Aún no hay ventas registradas.', style: TextStyle(color: _BusinessColors.textMuted)))
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: ventas.length,
-                    itemBuilder: (ctx, i) {
-                      final v = ventas[i];
-                      final pend = (v['estado_cobro'] ?? '') == 'Pendiente';
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('${v['cliente_proveedor']} · ${v['producto_nombre']} (x${v['cantidad'] ?? 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                                  Text('${_fechaCortaEs(v['fecha'].toString())} · ${v['metodo_pago']} · ${pend ? 'Pendiente' : 'Pagado'}', style: TextStyle(color: pend ? _BusinessColors.amberSoft : _BusinessColors.textMuted, fontSize: 12)),
-                                ],
-                              ),
-                            ),
-                            Text(_fmtEur((v['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 14)),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class StockScreen extends StatefulWidget {
-  final bool esAdmin;
-  final VoidCallback onChanged;
-  final Future<void> Function() onNuevaCompra;
-  final bool soloStockBajoInicial;
-
-  const StockScreen({
-    super.key,
-    this.esAdmin = true,
-    required this.onChanged,
-    required this.onNuevaCompra,
-    this.soloStockBajoInicial = false,
-  });
-
-  @override
-  State<StockScreen> createState() => _StockScreenState();
-}
-
-class _StockScreenState extends State<StockScreen> {
-  List todosProductos = [];
-  String busqueda = '';
-  late bool soloBajo;
-
-  @override
-  void initState() {
-    super.initState();
-    soloBajo = widget.soloStockBajoInicial;
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final db = await DatabaseHelper.instance.database;
-    final res = await db.query('productos', orderBy: 'nombre ASC');
-    if (mounted) setState(() => todosProductos = res);
-  }
-
-  Future<void> _dialogoProducto([Map? prod]) async {
-    final db = await DatabaseHelper.instance.database;
-    final provsDb = await db.query('clientes', where: "tipo = 'Proveedor'", orderBy: 'nombre ASC');
-    final listaProvs = <String>[
-      '',
-      ...provsDb.map((e) => e['nombre'].toString()).where((n) => n.isNotEmpty),
-    ];
-    final provActual = (prod?['proveedor'] ?? '').toString().trim();
-    if (provActual.isNotEmpty && !listaProvs.contains(provActual)) {
-      listaProvs.add(provActual);
-    }
-
-    String provSeleccionado = provActual;
-    final nombreCtrl = TextEditingController(text: prod?['nombre'] ?? '');
-    final stockCtrl = TextEditingController(text: (prod?['stock'] ?? 0).toString());
-    final costoCtrl = TextEditingController(text: prod != null ? ((prod['costo_compra'] as num).toDouble().toStringAsFixed(2).replaceAll('.', ',')) : '0,00');
-    final pvpCtrl = TextEditingController(text: prod != null ? ((prod['precio_pvp'] as num).toDouble().toStringAsFixed(2).replaceAll('.', ',')) : '0,00');
-    final colabCtrl = TextEditingController(text: prod != null ? ((prod['precio_colaborador'] as num).toDouble().toStringAsFixed(2).replaceAll('.', ',')) : '0,00');
-
-    if (!mounted) return;
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          backgroundColor: _BusinessColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
-          title: Text(prod == null ? 'Nuevo producto' : 'Editar producto', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Agregar contacto', style: TextStyle(fontWeight: FontWeight.bold)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre del producto')),
-                const SizedBox(height: 10),
+                TextField(
+                  controller: nombreCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Nombre o empresa',
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: listaProvs.contains(provSeleccionado) ? provSeleccionado : '',
-                  isExpanded: true,
-                  dropdownColor: _BusinessColors.surface,
-                  decoration: const InputDecoration(labelText: 'Proveedor habitual'),
-                  items: listaProvs
-                      .map((nom) => DropdownMenuItem<String>(
-                            value: nom,
-                            child: Text(nom.isEmpty ? 'Sin proveedor asignado' : nom, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                          ))
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) setDlg(() => provSeleccionado = v);
-                  },
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: stockCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Stock (uds)'))),
-                    const SizedBox(width: 10),
-                    Expanded(child: TextField(controller: costoCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Coste (€)'))),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: pvpCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'PVP (€)'))),
-                    const SizedBox(width: 10),
-                    Expanded(child: TextField(controller: colabCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Colaborador (€)'))),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
-              onPressed: () async {
-                final nom = nombreCtrl.text.trim();
-                if (nom.isEmpty) return;
-                double pNum(TextEditingController c) => double.tryParse(c.text.replaceAll(',', '.').trim()) ?? 0.0;
-                final prov = provSeleccionado.trim();
-                if (prov.isNotEmpty) {
-                  await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
-                }
-                final data = {
-                  'nombre': nom,
-                  'proveedor': prov,
-                  'stock': int.tryParse(stockCtrl.text.trim()) ?? 0,
-                  'costo_compra': pNum(costoCtrl),
-                  'precio_pvp': pNum(pvpCtrl),
-                  'precio_colaborador': pNum(colabCtrl),
-                };
-                if (prod == null) {
-                  await db.insert('productos', data);
-                } else {
-                  await db.update('productos', data, where: 'id = ?', whereArgs: [prod['id']]);
-                }
-                if (ctx.mounted) Navigator.pop(ctx);
-                _cargar();
-                widget.onChanged();
-              },
-              child: const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _dialogoAjustarStock(Map prod) {
-    final cantCtrl = TextEditingController(text: '1');
-    final provCtrl = TextEditingController(text: prod['proveedor']?.toString() ?? '');
-    bool esEntrada = true;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          backgroundColor: _BusinessColors.card,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18), side: const BorderSide(color: _BusinessColors.border)),
-          title: Text('Ajustar stock · ${prod['nombre']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: ChoiceChip(
-                      label: const Text('+ Entrada / Compra'),
-                      selected: esEntrada,
-                      selectedColor: _BusinessColors.emerald,
-                      onSelected: (_) => setDlg(() => esEntrada = true),
+                  value: categoriaSeleccionada,
+                  dropdownColor: const Color(0xFF1E293B),
+                  decoration: InputDecoration(
+                    labelText: 'Categoría',
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ChoiceChip(
-                      label: const Text('- Salida / Ajuste'),
-                      selected: !esEntrada,
-                      selectedColor: _BusinessColors.danger,
-                      onSelected: (_) => setDlg(() => esEntrada = false),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(controller: cantCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Unidades')),
-              if (esEntrada) ...[
-                const SizedBox(height: 10),
-                TextField(controller: provCtrl, decoration: const InputDecoration(labelText: 'Proveedor')),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar', style: TextStyle(color: _BusinessColors.textMuted))),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.primaryBlue, foregroundColor: Colors.white),
-              onPressed: () async {
-                final uds = int.tryParse(cantCtrl.text.trim()) ?? 0;
-                if (uds <= 0) return;
-                final stActual = (prod['stock'] as int?) ?? 0;
-                final stNuevo = esEntrada ? (stActual + uds) : ((stActual - uds) < 0 ? 0 : (stActual - uds));
-                final db = await DatabaseHelper.instance.database;
-                await db.update('productos', {'stock': stNuevo}, where: 'id = ?', whereArgs: [prod['id']]);
-                if (esEntrada) {
-                  final costoU = (prod['costo_compra'] as num?)?.toDouble() ?? 0.0;
-                  final hoy = DateTime.now().toIso8601String().split('T')[0];
-                  final prov = provCtrl.text.trim().isEmpty ? 'Proveedor General' : provCtrl.text.trim();
-                  await DatabaseHelper.instance.asegurarContacto(prov, 'Proveedor');
-                  await db.insert('movimientos', {
-                    'tipo': 'COMPRA',
-                    'producto_id': prod['id'],
-                    'producto_nombre': prod['nombre'],
-                    'cliente_proveedor': prov,
-                    'tarifa': 'Coste',
-                    'cantidad': uds,
-                    'precio_unitario': costoU,
-                    'importe': uds * costoU,
-                    'costo_total': uds * costoU,
-                    'metodo_pago': 'Transferencia',
-                    'estado_cobro': 'Pagado',
-                    'notas': '',
-                    'fecha': hoy,
-                    'fecha_vencimiento': hoy,
-                  });
-                }
-                if (ctx.mounted) Navigator.pop(ctx);
-                _cargar();
-                widget.onChanged();
-              },
-              child: const Text('Aplicar', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _verHistorialProducto(Map prod) async {
-    final db = await DatabaseHelper.instance.database;
-    final hist = await db.query(
-      'movimientos',
-      where: 'producto_id = ? OR producto_nombre = ?',
-      whereArgs: [prod['id'], prod['nombre']],
-      orderBy: 'id DESC',
-    );
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: _BusinessColors.card,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Historial · ${prod['nombre']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-            const SizedBox(height: 12),
-            if (hist.isEmpty)
-              const Text('Sin movimientos registrados para este producto.', style: TextStyle(color: _BusinessColors.textMuted))
-            else
-              ...hist.take(8).map((m) => ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('${m['tipo']} · ${m['cliente_proveedor']} (x${m['cantidad'] ?? 1})', style: const TextStyle(color: _BusinessColors.textMain)),
-                    subtitle: Text('${_fechaCortaEs(m['fecha'].toString())} · ${m['estado_cobro']}', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 11)),
-                    trailing: Text(_fmtEur((m['importe'] as num).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.emeraldBright)),
-                  )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    double valTotal = 0.0;
-    int bajos = 0;
-    for (var pItem in todosProductos) {
-      final st = (pItem['stock'] as int?) ?? 0;
-      final cU = (pItem['costo_compra'] as num?)?.toDouble() ?? 0.0;
-      valTotal += st * cU;
-      if (st <= 3) bajos++;
-    }
-
-    final filtrados = todosProductos.where((pItem) {
-      final nombre = (pItem['nombre'] ?? '').toString().toLowerCase();
-      final prov = (pItem['proveedor'] ?? '').toString().toLowerCase();
-      final q = busqueda.toLowerCase().trim();
-      final pasaBusq = q.isEmpty || nombre.contains(q) || prov.contains(q);
-      final pasaBajo = !soloBajo || (((pItem['stock'] as int?) ?? 0) <= 3);
-      return pasaBusq && pasaBajo;
-    }).toList();
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              widget.esAdmin ? 'Inventario y tarifas' : 'Existencias y precios',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
-            ),
-            if (widget.esAdmin)
-              Row(
-                children: [
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _BusinessColors.softBlue,
-                      side: const BorderSide(color: _BusinessColors.border),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () async {
-                      await widget.onNuevaCompra();
-                      _cargar();
-                      widget.onChanged();
-                    },
-                    child: const Text('+ Compra', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _BusinessColors.primaryBlue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () => _dialogoProducto(),
-                    child: const Text('+ Producto', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
-                ],
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        if (widget.esAdmin) ...[
-          Row(
-            children: [
-              Expanded(child: _miniKpiStock('Productos', '${todosProductos.length}', _BusinessColors.textMain, () => setState(() => soloBajo = false))),
-              const SizedBox(width: 10),
-              Expanded(child: _miniKpiStock('Valor inventario', _fmtEur(valTotal), _BusinessColors.textMain, () => setState(() => soloBajo = false))),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _miniKpiStock('Stock bajo', '$bajos', _BusinessColors.danger, () => setState(() => soloBajo = !soloBajo))),
-              const Expanded(child: SizedBox()),
-            ],
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        TextField(
-          onChanged: (v) => setState(() => busqueda = v),
-          decoration: const InputDecoration(hintText: 'Buscar producto o referencia...', prefixIcon: Icon(Icons.search, color: _BusinessColors.textMuted)),
-        ),
-        const SizedBox(height: 12),
-
-        if (filtrados.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12)),
-            alignment: Alignment.center,
-            child: const Text('No hay productos para mostrar.', style: TextStyle(color: _BusinessColors.textMuted)),
-          )
-        else
-          ...filtrados.map((pr) {
-            final st = (pr['stock'] as int?) ?? 0;
-            final coste = (pr['costo_compra'] as num?)?.toDouble() ?? 0.0;
-            final pvp = (pr['precio_pvp'] as num?)?.toDouble() ?? 0.0;
-            final colab = (pr['precio_colaborador'] as num?)?.toDouble() ?? 0.0;
-            final margenPct = pvp > 0 ? (((pvp - coste) / pvp) * 100) : 0.0;
-            final esBajo = st <= 3;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: _BusinessColors.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _BusinessColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(pr['nombre'], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain))),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: esBajo ? const Color(0xFF3A161B) : const Color(0xFF102E24),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          '$st uds',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: esBajo ? const Color(0xFFF87171) : _BusinessColors.emeraldBright),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    widget.esAdmin
-                        ? 'Coste ${_fmtEur(coste)} · PVP ${_fmtEur(pvp)} · Colab. ${_fmtEur(colab)} · margen ${margenPct.toStringAsFixed(1).replaceAll('.', ',')} %'
-                        : 'PVP ${_fmtEur(pvp)} · Colab. ${_fmtEur(colab)}',
-                    style: const TextStyle(fontSize: 12, color: _BusinessColors.textMuted),
-                  ),
-                  if (widget.esAdmin) ...[
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        _btnAccionStock('Ajustar', () => _dialogoAjustarStock(pr)),
-                        const SizedBox(width: 8),
-                        _btnAccionStock('Historial', () => _verHistorialProducto(pr)),
-                        const SizedBox(width: 8),
-                        _btnAccionStock('Editar', () => _dialogoProducto(pr)),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: _BusinessColors.textMuted, size: 20),
-                          onPressed: () async {
-                            final db = await DatabaseHelper.instance.database;
-                            await db.delete('productos', where: 'id = ?', whereArgs: [pr['id']]);
-                            _cargar();
-                            widget.onChanged();
-                          },
-                        ),
-                      ],
-                    ),
+                  items: const [
+                    DropdownMenuItem(value: 'Cliente', child: Text('Cliente (Tarifa PVP)')),
+                    DropdownMenuItem(value: 'Colaborador', child: Text('Colaborador (Tarifa especial)')),
+                    DropdownMenuItem(value: 'Proveedor', child: Text('Proveedor (Compras / Stock)')),
                   ],
-                ],
-              ),
-            );
-          }),
-      ],
-    );
-  }
-
-  Widget _miniKpiStock(String titulo, String valor, Color colorValor, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(titulo, style: const TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-            const SizedBox(height: 6),
-            Text(valor, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorValor)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _btnAccionStock(String texto, VoidCallback onTap) {
-    return OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _BusinessColors.textMain,
-        backgroundColor: _BusinessColors.surface,
-        side: const BorderSide(color: _BusinessColors.border),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
-      ),
-      onPressed: onTap,
-      child: Text(texto, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class CobrosScreen extends StatefulWidget {
-  final VoidCallback onChanged;
-  final Future<void> Function() onNuevaVenta;
-
-  const CobrosScreen({super.key, required this.onChanged, required this.onNuevaVenta});
-
-  @override
-  State<CobrosScreen> createState() => _CobrosScreenState();
-}
-
-class _CobrosScreenState extends State<CobrosScreen> {
-  String tabActiva = 'Me deben';
-  List pendientes = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final db = await DatabaseHelper.instance.database;
-    final res = await db.query(
-      'movimientos',
-      where: "estado_cobro = 'Pendiente'",
-      orderBy: 'fecha_vencimiento ASC',
-    );
-    if (mounted) setState(() => pendientes = res);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hoy = DateTime.now();
-    final hoyDia = DateTime(hoy.year, hoy.month, hoy.day);
-
-    double totalPend = 0.0;
-    double totalVenc = 0.0;
-
-    for (var pItem in pendientes) {
-      final imp = (pItem['importe'] as num?)?.toDouble() ?? 0.0;
-      totalPend += imp;
-      final fv = DateTime.tryParse((pItem['fecha_vencimiento'] ?? '').toString()) ?? hoyDia;
-      if (hoyDia.difference(DateTime(fv.year, fv.month, fv.day)).inDays > 0) {
-        totalVenc += imp;
-      }
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Cobros pendientes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.emerald, foregroundColor: Colors.white),
-              onPressed: () async {
-                await widget.onNuevaVenta();
-                _cargar();
-                widget.onChanged();
-              },
-              child: const Text('+ Cobro', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: ['Me deben', 'Debo'].map((t) {
-            final sel = tabActiva == t;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(t),
-                selected: sel,
-                selectedColor: _BusinessColors.primaryBlue,
-                backgroundColor: _BusinessColors.card,
-                labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMain, fontWeight: FontWeight.bold),
-                onSelected: (_) => setState(() => tabActiva = t),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total pendiente', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                    const SizedBox(height: 6),
-                    Text(_fmtEur(tabActiva == 'Me deben' ? totalPend : 0.0), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Vencido', style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted)),
-                    const SizedBox(height: 6),
-                    Text(_fmtEur(tabActiva == 'Me deben' ? totalVenc : 0.0), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: _BusinessColors.danger)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        if (tabActiva == 'Debo' || pendientes.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12)),
-            alignment: Alignment.center,
-            child: const Text('No hay saldos pendientes en esta pestaña.', style: TextStyle(color: _BusinessColors.textMuted)),
-          )
-        else
-          ...pendientes.map((c) {
-            final imp = (c['importe'] as num?)?.toDouble() ?? 0.0;
-            final fv = DateTime.tryParse((c['fecha_vencimiento'] ?? '').toString()) ?? hoyDia;
-            final atraso = hoyDia.difference(DateTime(fv.year, fv.month, fv.day)).inDays;
-            final estadoTexto = atraso > 0
-                ? '⚠ venció ${_fechaCortaEs(c['fecha_vencimiento'].toString())}'
-                : 'vence ${_fechaCortaEs(c['fecha_vencimiento'].toString())}';
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(14), border: Border.all(color: _BusinessColors.border)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(c['cliente_proveedor'], style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                      Text(_fmtEur(imp), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text('${c['producto_nombre']} · $estadoTexto', style: TextStyle(fontSize: 12, color: atraso > 0 ? _BusinessColors.amberSoft : _BusinessColors.textMuted)),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: _BusinessColors.emerald, foregroundColor: Colors.white),
-                        onPressed: () async {
-                          final db = await DatabaseHelper.instance.database;
-                          await db.update('movimientos', {'tipo': 'VENTA', 'estado_cobro': 'Pagado'}, where: 'id = ?', whereArgs: [c['id']]);
-                          _cargar();
-                          widget.onChanged();
-                        },
-                        child: const Text('Cobrar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(foregroundColor: _BusinessColors.textMain, backgroundColor: _BusinessColors.surface, side: const BorderSide(color: _BusinessColors.border)),
-                        onPressed: () async {
-                          final msg = 'Hola ${c['cliente_proveedor']}, te recordamos el cobro pendiente de ${_fmtEur(imp)} por ${c['producto_nombre']}.';
-                          await Clipboard.setData(ClipboardData(text: msg));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recordatorio copiado para WhatsApp')));
-                          }
-                        },
-                        child: const Text('WhatsApp', style: TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }),
-      ],
-    );
-  }
-}
-
-class KardexScreen extends StatefulWidget {
-  final VoidCallback onChanged;
-  final Future<void> Function() onNuevaVenta;
-  final Future<void> Function() onNuevaCompra;
-  final String filtroInicial;
-
-  const KardexScreen({
-    super.key,
-    required this.onChanged,
-    required this.onNuevaVenta,
-    required this.onNuevaCompra,
-    this.filtroInicial = 'TODOS',
-  });
-
-  @override
-  State<KardexScreen> createState() => _KardexScreenState();
-}
-
-class _KardexScreenState extends State<KardexScreen> {
-  late String filtro;
-  List movs = [];
-
-  @override
-  void initState() {
-    super.initState();
-    filtro = widget.filtroInicial;
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final db = await DatabaseHelper.instance.database;
-    List res = [];
-    if (filtro == 'TODOS') {
-      res = await db.query('movimientos', orderBy: 'id DESC');
-    } else if (filtro == 'VENTA') {
-      res = await db.query('movimientos', where: "tipo = 'VENTA' OR tipo = 'COBRO'", orderBy: 'id DESC');
-    } else {
-      res = await db.query('movimientos', where: 'tipo = ?', whereArgs: [filtro], orderBy: 'id DESC');
-    }
-    if (mounted) setState(() => movs = res);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Kardex de movimientos', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain)),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () async {
-                      await widget.onNuevaVenta();
-                      _cargar();
-                      widget.onChanged();
-                    },
-                    child: const Text('+ Venta', style: TextStyle(color: _BusinessColors.emeraldBright, fontWeight: FontWeight.bold)),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      await widget.onNuevaCompra();
-                      _cargar();
-                      widget.onChanged();
-                    },
-                    child: const Text('+ Compra', style: TextStyle(color: _BusinessColors.softBlue, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          child: Row(
-            children: ['TODOS', 'VENTA', 'COMPRA'].map((f) {
-              final sel = filtro == f;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text(f),
-                  selected: sel,
-                  selectedColor: _BusinessColors.primaryBlue,
-                  backgroundColor: _BusinessColors.card,
-                  labelStyle: TextStyle(color: sel ? Colors.white : _BusinessColors.textMuted, fontWeight: FontWeight.bold, fontSize: 12),
-                  onSelected: (_) {
-                    setState(() => filtro = f);
-                    _cargar();
-                  },
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        Expanded(
-          child: movs.isEmpty
-              ? const Center(child: Text('Sin movimientos registrados.', style: TextStyle(color: _BusinessColors.textMuted)))
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
-                  itemCount: movs.length,
-                  itemBuilder: (ctx, i) {
-                    final m = movs[i];
-                    final esCompra = (m['tipo'] ?? '').toString().toUpperCase() == 'COMPRA';
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: _BusinessColors.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _BusinessColors.border)),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${m['cliente_proveedor']} · ${m['producto_nombre']} (x${m['cantidad'] ?? 1})', style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 13)),
-                                Text('${m['tipo']} · ${_fechaCortaEs(m['fecha'].toString())} · ${m['estado_cobro']}', style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 11)),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            '${esCompra ? '-' : '+'}${_fmtEur((m['importe'] as num).toDouble())}',
-                            style: TextStyle(fontWeight: FontWeight.bold, color: esCompra ? _BusinessColors.amberSoft : _BusinessColors.emeraldBright, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-}
-
-class ClientesScreen extends StatefulWidget {
-  final VoidCallback onChanged;
-  const ClientesScreen({super.key, required this.onChanged});
-
-  @override
-  State<ClientesScreen> createState() => _ClientesScreenState();
-}
-
-class _ClientesScreenState extends State<ClientesScreen> {
-  List todosContactos = [];
-  String filtroTipo = 'Todos';
-  String busqueda = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final db = await DatabaseHelper.instance.database;
-    final res = await db.query('clientes', orderBy: 'nombre ASC');
-    if (mounted) setState(() => todosContactos = res);
-  }
-
-  String _tipoPorDefectoSegunPestana() {
-    if (filtroTipo == 'Colaboradores') return 'Colaborador';
-    if (filtroTipo == 'Proveedores') return 'Proveedor';
-    return 'Cliente Final';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final cntClientes = todosContactos.where((c) => (c['tipo'] ?? 'Cliente Final') == 'Cliente Final').length;
-    final cntColab = todosContactos.where((c) => (c['tipo'] ?? '') == 'Colaborador').length;
-    final cntProv = todosContactos.where((c) => (c['tipo'] ?? '') == 'Proveedor').length;
-
-    final filtrados = todosContactos.where((c) {
-      final tipo = (c['tipo'] ?? 'Cliente Final').toString();
-      final nombre = (c['nombre'] ?? '').toString().toLowerCase();
-      final tel = (c['telefono'] ?? '').toString().toLowerCase();
-      final q = busqueda.toLowerCase().trim();
-
-      final pasaBusqueda = q.isEmpty || nombre.contains(q) || tel.contains(q);
-      if (!pasaBusqueda) return false;
-
-      if (filtroTipo == 'Clientes') return tipo == 'Cliente Final';
-      if (filtroTipo == 'Colaboradores') return tipo == 'Colaborador';
-      if (filtroTipo == 'Proveedores') return tipo == 'Proveedor';
-      return true;
-    }).toList();
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Expanded(
-              child: Text(
-                'Agenda comercial',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _BusinessColors.textMain),
-              ),
-            ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _BusinessColors.primaryBlue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.person_add_alt_1_rounded, size: 17),
-              label: const Text('Agregar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              onPressed: () async {
-                final res = await mostrarDialogoContacto(context, tipoPorDefecto: _tipoPorDefectoSegunPestana());
-                if (res != null) {
-                  _cargar();
-                  widget.onChanged();
-                }
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Clientes, colaboradores con tarifa especial y proveedores.',
-          style: TextStyle(fontSize: 12, color: _BusinessColors.textMuted),
-        ),
-        const SizedBox(height: 12),
-
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _chipFiltro('Todos (${todosContactos.length})', 'Todos'),
-              const SizedBox(width: 8),
-              _chipFiltro('Clientes ($cntClientes)', 'Clientes'),
-              const SizedBox(width: 8),
-              _chipFiltro('Colaboradores ($cntColab)', 'Colaboradores'),
-              const SizedBox(width: 8),
-              _chipFiltro('Proveedores ($cntProv)', 'Proveedores'),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        TextField(
-          onChanged: (v) => setState(() => busqueda = v),
-          decoration: const InputDecoration(
-            hintText: 'Buscar por nombre o teléfono...',
-            prefixIcon: Icon(Icons.search, color: _BusinessColors.textMuted),
-          ),
-        ),
-
-        const SizedBox(height: 14),
-
-        if (filtrados.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(22),
-            decoration: BoxDecoration(
-              color: _BusinessColors.card,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _BusinessColors.border),
-            ),
-            alignment: Alignment.center,
-            child: Column(
-              children: [
-                const Text('No hay registros en esta categoría.', style: TextStyle(color: _BusinessColors.textMuted, fontSize: 13)),
-                const SizedBox(height: 10),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _BusinessColors.softBlue,
-                    side: const BorderSide(color: _BusinessColors.border),
-                  ),
-                  onPressed: () async {
-                    final res = await mostrarDialogoContacto(context, tipoPorDefecto: _tipoPorDefectoSegunPestana());
-                    if (res != null) {
-                      _cargar();
-                      widget.onChanged();
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => categoriaSeleccionada = val);
                     }
                   },
-                  child: const Text('+ Agregar nuevo'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: telefonoCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    hintText: 'Teléfono / WhatsApp',
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: notasCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Notas / Dirección / Referencia',
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
               ],
             ),
-          )
-        else
-          ...filtrados.map((c) {
-            final tipo = (c['tipo'] ?? 'Cliente Final').toString();
-            final rol = (c['rol'] ?? 'Empleado').toString();
-            final esColab = tipo == 'Colaborador';
-            final esProv = tipo == 'Proveedor';
-
-            final Color colorRol = esProv
-                ? _BusinessColors.purpleSoft
-                : (esColab ? _BusinessColors.amberSoft : _BusinessColors.emeraldBright);
-            final IconData iconoRol = esProv
-                ? Icons.local_shipping_outlined
-                : (esColab ? Icons.handshake_outlined : Icons.person_outline_rounded);
-            final String etiquetaRol = esProv
-                ? 'Proveedor · Perfil $rol'
-                : (esColab ? 'Colaborador · Tarifa Especial · $rol' : 'Cliente · Tarifa PVP · $rol');
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: _BusinessColors.card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _BusinessColors.border),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar', style: TextStyle(color: Colors.white70)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3B82F6),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: _BusinessColors.surface,
-                    child: Icon(iconoRol, color: colorRol, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(c['nombre'], style: const TextStyle(fontWeight: FontWeight.bold, color: _BusinessColors.textMain, fontSize: 14)),
-                        const SizedBox(height: 2),
-                        Text(etiquetaRol, style: TextStyle(color: colorRol, fontSize: 12, fontWeight: FontWeight.w500)),
-                        if ((c['telefono'] ?? '').toString().isNotEmpty || (c['notas'] ?? '').toString().isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            [
-                              if ((c['telefono'] ?? '').toString().isNotEmpty) c['telefono'].toString(),
-                              if ((c['notas'] ?? '').toString().isNotEmpty) c['notas'].toString(),
-                            ].join(' · '),
-                            style: const TextStyle(color: _BusinessColors.textMuted, fontSize: 11),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, color: _BusinessColors.textMuted, size: 19),
-                    onPressed: () async {
-                      final editado = await mostrarDialogoContacto(context, contactoExistente: c);
-                      if (editado != null) {
-                        _cargar();
-                        widget.onChanged();
-                      }
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: _BusinessColors.textMuted, size: 19),
-                    onPressed: () async {
-                      final db = await DatabaseHelper.instance.database;
-                      await db.delete('clientes', where: 'id = ?', whereArgs: [c['id']]);
-                      _cargar();
-                      widget.onChanged();
-                    },
-                  ),
-                ],
-              ),
-            );
-          }),
-      ],
+              onPressed: () async {
+                if (nombreCtrl.text.trim().isEmpty) return;
+                await DatabaseHelper.instance.insertContacto({
+                  'nombre': nombreCtrl.text.trim(),
+                  'categoria': categoriaSeleccionada,
+                  'telefono': telefonoCtrl.text.trim(),
+                  'notas': notasCtrl.text.trim(),
+                  'rol': 'N/A',
+                });
+                if (!mounted) return;
+                Navigator.pop(ctx);
+                _cargarContactos();
+              },
+              child: const Text('Guardar', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _chipFiltro(String etiqueta, String valor) {
-    final sel = filtroTipo == valor;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Agenda comercial',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Clientes, colaboradores con tarifa especial y proveedores.',
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1D4ED8),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _mostrarDialogoAgregarContacto,
+                icon: const Icon(Icons.person_add, size: 18),
+                label: const Text('Agregar'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _chipFiltro('Todos', 'Todos ($_totalTodos)'),
+                const SizedBox(width: 8),
+                _chipFiltro('Cliente', 'Clientes ($_totalClientes)'),
+                const SizedBox(width: 8),
+                _chipFiltro('Colaborador', 'Colaboradores ($_totalColaboradores)'),
+                const SizedBox(width: 8),
+                _chipFiltro('Proveedor', 'Proveedores ($_totalProveedores)'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            onChanged: (val) {
+              _busqueda = val;
+              _cargarContactos();
+            },
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search, color: Colors.white54),
+              hintText: 'Buscar por nombre o teléfono...',
+              filled: true,
+              fillColor: const Color(0xFF1E293B),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _contactos.isEmpty
+                ? const Center(
+                    child: Text('No hay contactos registrados', style: TextStyle(color: Colors.white54)),
+                  )
+                : ListView.builder(
+                    itemCount: _contactos.length,
+                    itemBuilder: (context, index) {
+                      final item = _contactos[index];
+                      final cat = item['categoria'] ?? 'Cliente';
+                      IconData icon = Icons.person;
+                      Color badgeColor = const Color(0xFF3B82F6);
+                      if (cat == 'Colaborador') {
+                        icon = Icons.handshake;
+                        badgeColor = Colors.amber;
+                      } else if (cat == 'Proveedor') {
+                        icon = Icons.local_shipping;
+                        badgeColor = const Color(0xFF10B981);
+                      }
+
+                      return Card(
+                        color: const Color(0xFF1E293B),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: badgeColor.withOpacity(0.15),
+                            child: Icon(icon, color: badgeColor, size: 20),
+                          ),
+                          title: Text(
+                            item['nombre'] ?? '',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$cat • ${item['telefono'] ?? 'Sin teléfono'}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                              if ((item['notas'] ?? '').toString().isNotEmpty)
+                                Text(
+                                  item['notas'],
+                                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                                ),
+                            ],
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.white54),
+                            onPressed: () async {
+                              await DatabaseHelper.instance.deleteContacto(item['id']);
+                              _cargarContactos();
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chipFiltro(String valor, String etiqueta) {
+    final bool seleccionado = _filtroCategoria == valor;
     return ChoiceChip(
       label: Text(etiqueta),
-      selected: sel,
-      selectedColor: _BusinessColors.primaryBlue,
-      backgroundColor: _BusinessColors.card,
-      side: BorderSide(color: sel ? _BusinessColors.primaryBlue : _BusinessColors.border),
+      selected: seleccionado,
+      onSelected: (_) {
+        setState(() => _filtroCategoria = valor);
+        _cargarContactos();
+      },
+      selectedColor: const Color(0xFF1D4ED8),
+      backgroundColor: const Color(0xFF1E293B),
       labelStyle: TextStyle(
-        color: sel ? Colors.white : _BusinessColors.textMuted,
-        fontWeight: FontWeight.bold,
+        color: seleccionado ? Colors.white : Colors.white70,
         fontSize: 12,
       ),
-      onSelected: (_) => setState(() => filtroTipo = valor),
+    );
+  }
+}
+
+class VentasScreen extends StatelessWidget {
+  const VentasScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text('Módulo de Ventas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+class StockScreen extends StatelessWidget {
+  const StockScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text('Módulo de Stock e Inventario', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+class CobrosScreen extends StatelessWidget {
+  const CobrosScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text('Módulo de Cobros', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+class KardexScreen extends StatelessWidget {
+  const KardexScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text('Módulo de Kardex', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
     );
   }
 }
